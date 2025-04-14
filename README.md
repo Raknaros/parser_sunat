@@ -1,4 +1,4 @@
-# Analizador de Documentos XML
+# Parser de Documentos XML de SUNAT
 
 Esta aplicación procesa archivos XML de documentos electrónicos (Facturas, Notas de Crédito, etc.) y genera reportes en formato CSV.
 
@@ -12,7 +12,7 @@ Esta aplicación procesa archivos XML de documentos electrónicos (Facturas, Not
 
 Para procesar documentos XML, ejecute:
 
-`ash
+`ash
 python src/main.py [directorio_entrada] --output_dir [directorio_salida]
 `
 
@@ -27,7 +27,7 @@ python src/main.py [directorio_entrada] --output_dir [directorio_salida]
 ## Estructura del Proyecto
 
 `
-xml_analyzer/
+parser_sunat/
 
  src/
     processors/         # Procesadores para cada tipo de documento

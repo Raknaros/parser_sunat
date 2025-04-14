@@ -9,7 +9,7 @@ def setup_logger(log_path: Path) -> logging.Logger:
     log_path.mkdir(parents=True, exist_ok=True)
     
     # Crear logger
-    logger = logging.getLogger('xml_analyzer')
+    logger = logging.getLogger('parser_sunat')
     logger.setLevel(logging.INFO)
     
     # Evitar duplicación de handlers
