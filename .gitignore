@@ -1,0 +1,17 @@
+# Entorno virtual
+venv/
+
+# Archivos Python compilados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Directorios de salida y logs que contienen datos generados
+output/
+logs/
+
+# Otros archivos
+.DS_Store
+.idea/
+.vscode/
+*.swp 
