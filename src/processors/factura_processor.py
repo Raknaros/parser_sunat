@@ -2,6 +2,7 @@ from .base_processor import BaseXMLProcessor
 import pandas as pd
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional # Añadir Dict para el tipo de retorno
 
 class FacturaProcessor(BaseXMLProcessor):
     def __init__(self, logger):
@@ -26,13 +27,20 @@ class FacturaProcessor(BaseXMLProcessor):
         found = element.find(xpath, namespaces)
         return found.get(attr_name) if found is not None else None
 
-    def process_file(self, file_path: Path) -> pd.DataFrame:
-        """Procesa un archivo XML de Factura y extrae sus datos principales"""
+    def process_file(self, file_path: Path) -> Optional[Dict[str, pd.DataFrame]]:
+        """Procesa un archivo XML de Factura y extrae sus datos en DataFrames separados."""
         self.log_operation("Procesamiento", "Iniciado", f"Archivo: {file_path}")
         
+        # Inicializar DataFrames vacíos en caso de error temprano
+        result = {
+            'header': pd.DataFrame(),
+            'lines': pd.DataFrame(),
+            'payment_terms': pd.DataFrame()
+        }
+
         try:
             if not self.validate_xml(file_path):
-                return pd.DataFrame()
+                return result # Retorna DataFrames vacíos si la validación falla
                 
             tree = ET.parse(file_path)
             root = tree.getroot()
@@ -42,7 +50,7 @@ class FacturaProcessor(BaseXMLProcessor):
             root_attrs = root.attrib
             self.log_operation("Procesamiento", "Info", f"Root element: {root_tag}, Root attributes: {root_attrs}")
             
-            # Extraer todos los datos usando los namespaces adecuados
+            # --- Extracción Datos Cabecera --- 
             invoice_data = {}
             
             # Información básica de la factura
@@ -114,47 +122,62 @@ class FacturaProcessor(BaseXMLProcessor):
                         elif tax_code == '9999':  # Otros tributos
                             invoice_data['total_otros_tributos'] = tax_amount
             
-            # Procesar líneas de factura
-            invoice_lines = []
+            # Generar Código Único de Identificación (CUI)
+            cui = None
+            ruc_emisor = invoice_data.get('ruc_emisor')
+            tipo_doc = invoice_data.get('tipo_documento')
+            numero_factura = invoice_data.get('numero')
+
+            if ruc_emisor and tipo_doc and numero_factura:
+                try:
+                    ruc_hex = hex(int(ruc_emisor))[2:].upper() # Convertir a entero, luego a hex y quitar '0x'
+                    tipo_doc_fmt = f"{tipo_doc:0>2}" # Formatear a 2 dígitos con cero a la izquierda si es necesario
+                    numero_fmt = numero_factura.replace('-', '') # Quitar guion
+                    cui = f"{ruc_hex}{tipo_doc_fmt}{numero_fmt}"
+                except (ValueError, TypeError) as e:
+                    self.log_operation("Procesamiento", "Error", f"No se pudo generar CUI para {numero_factura}: {e}")
+            else:
+                self.log_operation("Procesamiento", "Advertencia", f"Faltan datos para generar CUI en archivo: {file_path}. RUC: {ruc_emisor}, TipoDoc: {tipo_doc}, Numero: {numero_factura}")
+
+            invoice_data['CUI'] = cui
+            
+            # Crear DataFrame de Cabecera
+            df_header = pd.DataFrame([invoice_data])
+            result['header'] = df_header
+
+            # --- Extracción Líneas de Factura --- 
+            lines_list: List[Dict] = []
             lines = root.findall('.//cac:InvoiceLine', self.NAMESPACES)
             
-            if not lines:
-                # Si no hay líneas, retornar un DataFrame solo con los datos de la factura
-                self.log_operation("Procesamiento", "Advertencia", f"No se encontraron líneas de detalle en: {file_path}")
-                return pd.DataFrame([invoice_data])
-            
-            # Si hay líneas, para cada línea de factura crear una fila completa con todos los datos
             for line in lines:
-                # Crear una copia de los datos de la factura para esta línea
-                line_row = invoice_data.copy()
-                
-                # Añadir los datos específicos de esta línea
-                line_row['linea_id'] = self.safe_find_text(line, './/cbc:ID', self.NAMESPACES)
-                line_row['cantidad'] = self.safe_find_text(line, './/cbc:InvoicedQuantity', self.NAMESPACES)
-                line_row['unidad'] = self.safe_find_attr(line, './/cbc:InvoicedQuantity', 'unitCode', self.NAMESPACES)
-                line_row['descripcion'] = self.safe_find_text(line, './/cbc:Description', self.NAMESPACES)
+                line_data = {}
+                line_data['CUI'] = cui # Añadir CUI para la relación
+                line_data['linea_id'] = self.safe_find_text(line, './/cbc:ID', self.NAMESPACES)
+                line_data['cantidad'] = self.safe_find_text(line, './/cbc:InvoicedQuantity', self.NAMESPACES)
+                line_data['unidad'] = self.safe_find_attr(line, './/cbc:InvoicedQuantity', 'unitCode', self.NAMESPACES)
+                line_data['descripcion'] = self.safe_find_text(line, './/cbc:Description', self.NAMESPACES)
                 
                 # Información de precio unitario
                 price_amount = line.find('.//cac:Price/cbc:PriceAmount', self.NAMESPACES)
                 if price_amount is not None:
-                    line_row['precio_unitario'] = price_amount.text
-                    line_row['moneda_precio_unitario'] = price_amount.get('currencyID')
+                    line_data['precio_unitario'] = price_amount.text
+                    line_data['moneda_precio_unitario'] = price_amount.get('currencyID')
                 
                 # Valores de precio de venta
                 pricing_reference = line.find('.//cac:PricingReference', self.NAMESPACES)
                 if pricing_reference is not None:
                     alternative_price = pricing_reference.find('.//cac:AlternativeConditionPrice', self.NAMESPACES)
                     if alternative_price is not None:
-                        line_row['precio_venta_unitario'] = self.safe_find_text(alternative_price, './/cbc:PriceAmount', self.NAMESPACES)
-                        line_row['tipo_precio_venta'] = self.safe_find_text(alternative_price, './/cbc:PriceTypeCode', self.NAMESPACES)
+                        line_data['precio_venta_unitario'] = self.safe_find_text(alternative_price, './/cbc:PriceAmount', self.NAMESPACES)
+                        line_data['tipo_precio_venta'] = self.safe_find_text(alternative_price, './/cbc:PriceTypeCode', self.NAMESPACES)
                 
                 # Valores totales de la línea
-                line_row['subtotal'] = self.safe_find_text(line, './/cbc:LineExtensionAmount', self.NAMESPACES)
+                line_data['subtotal'] = self.safe_find_text(line, './/cbc:LineExtensionAmount', self.NAMESPACES)
                 
                 # Información de impuestos específicos de la línea
                 tax_totals = line.findall('.//cac:TaxTotal', self.NAMESPACES)
                 for tax_total in tax_totals:
-                    line_row['linea_impuesto_total'] = self.safe_find_text(tax_total, './/cbc:TaxAmount', self.NAMESPACES)
+                    line_data['linea_impuesto_total'] = self.safe_find_text(tax_total, './/cbc:TaxAmount', self.NAMESPACES)
                     
                     tax_subtotals = tax_total.findall('.//cac:TaxSubtotal', self.NAMESPACES)
                     for tax_subtotal in tax_subtotals:
@@ -167,24 +190,53 @@ class FacturaProcessor(BaseXMLProcessor):
                                 
                                 # Asignar valores según el tipo de impuesto
                                 if tax_code == '1000':  # IGV
-                                    line_row['linea_igv'] = tax_amount
-                                    line_row['linea_codigo_igv'] = self.safe_find_text(tax_category, './/cbc:TaxExemptionReasonCode', self.NAMESPACES)
-                                    line_row['linea_porcentaje_igv'] = self.safe_find_text(tax_category, './/cbc:Percent', self.NAMESPACES)
+                                    line_data['linea_igv'] = tax_amount
+                                    line_data['linea_codigo_igv'] = self.safe_find_text(tax_category, './/cbc:TaxExemptionReasonCode', self.NAMESPACES)
+                                    line_data['linea_porcentaje_igv'] = self.safe_find_text(tax_category, './/cbc:Percent', self.NAMESPACES)
                                 elif tax_code == '2000':  # ISC
-                                    line_row['linea_isc'] = tax_amount
-                                    line_row['linea_codigo_isc'] = self.safe_find_text(tax_category, './/cbc:TierRange', self.NAMESPACES)
+                                    line_data['linea_isc'] = tax_amount
+                                    line_data['linea_codigo_isc'] = self.safe_find_text(tax_category, './/cbc:TierRange', self.NAMESPACES)
                                 elif tax_code == '9999':  # Otros tributos
-                                    line_row['linea_otros_tributos'] = tax_amount
+                                    line_data['linea_otros_tributos'] = tax_amount
                 
-                # Añadir esta línea al listado
-                invoice_lines.append(line_row)
+                lines_list.append(line_data)
             
-            # Convertir todas las líneas a un DataFrame
-            df_result = pd.DataFrame(invoice_lines)
+            # Crear DataFrame de Líneas
+            if lines_list:
+                df_lines = pd.DataFrame(lines_list)
+                result['lines'] = df_lines
+
+            # --- Extracción Términos de Pago --- 
+            payment_terms_list: List[Dict] = []
+            payment_terms_nodes = root.findall('.//cac:PaymentTerms', self.NAMESPACES)
             
-            self.log_operation("Procesamiento", "Éxito", f"Archivo: {file_path}, Líneas extraídas: {len(invoice_lines)}")
-            return df_result
+            for pt_node in payment_terms_nodes:
+                pt_data = {}
+                pt_data['CUI'] = cui # Añadir CUI para la relación
+                pt_data['forma_pago_id'] = self.safe_find_text(pt_node, './cbc:ID', self.NAMESPACES) # e.g., FormaPago
+                pt_data['medio_pago_id'] = self.safe_find_text(pt_node, './cbc:PaymentMeansID', self.NAMESPACES) # e.g., Credito, Cuota001
+                pt_data['monto_pago'] = self.safe_find_text(pt_node, './cbc:Amount', self.NAMESPACES)
+                pt_data['moneda_pago'] = self.safe_find_attr(pt_node, './cbc:Amount', 'currencyID', self.NAMESPACES)
+                pt_data['fecha_vencimiento'] = self.safe_find_text(pt_node, './cbc:PaymentDueDate', self.NAMESPACES) # Solo para cuotas
+                payment_terms_list.append(pt_data)
+                
+            # Crear DataFrame de Términos de Pago
+            if payment_terms_list:
+                df_payment_terms = pd.DataFrame(payment_terms_list)
+                result['payment_terms'] = df_payment_terms
+            
+            self.log_operation("Procesamiento", "Éxito", 
+                               f"Archivo: {file_path}, CUI: {cui}, "
+                               f"Header: {len(result['header'])} fila(s), "
+                               f"Lines: {len(result['lines'])} fila(s), "
+                               f"Payment Terms: {len(result['payment_terms'])} fila(s)")
+            return result
             
         except Exception as e:
             self.log_operation("Procesamiento", "Error", f"Archivo: {file_path}, Error: {str(e)}")
-            return pd.DataFrame() 
+            # Retorna DataFrames vacíos en caso de excepción general
+            return {
+                'header': pd.DataFrame(),
+                'lines': pd.DataFrame(),
+                'payment_terms': pd.DataFrame()
+            } 
