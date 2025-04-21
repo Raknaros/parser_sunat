@@ -59,27 +59,45 @@ def save_dataframe(df, base_path, filename_prefix, timestamp):
 def process_xml_file(processor, xml_file_path, results_collector):
     """Procesa un único archivo XML y añade los resultados al colector."""
     print(f"Procesando archivo XML: {xml_file_path.name} ... ", end="")
+    processed_successfully = False # Flag para el conteo
     try:
         result_dict = processor.process_file(xml_file_path)
+        
         if result_dict is not None:
-            if not result_dict['header'].empty:
-                results_collector['headers'].append(result_dict['header'])
-            if not result_dict['lines'].empty:
-                results_collector['lines'].append(result_dict['lines'])
-            if not result_dict['payment_terms'].empty:
-                results_collector['payments'].append(result_dict['payment_terms'])
-            print("OK")
-            return True # Indica éxito
+            logger.debug(f"process_file devolvió un diccionario para {xml_file_path.name}")
+            # Verificar si la cabecera está vacía ANTES de añadir y contar
+            header_df = result_dict.get('header')
+            if header_df is not None and not header_df.empty:
+                logger.debug(f"Header no vacío encontrado para {xml_file_path.name}. Añadiendo y contando como éxito.")
+                results_collector['headers'].append(header_df)
+                processed_successfully = True # Contar solo si la cabecera no está vacía
+                # Añadir líneas y pagos solo si la cabecera fue válida
+                lines_df = result_dict.get('lines')
+                payments_df = result_dict.get('payment_terms')
+                if lines_df is not None and not lines_df.empty:
+                    results_collector['lines'].append(lines_df)
+                if payments_df is not None and not payments_df.empty:
+                    results_collector['payments'].append(payments_df)
+                print("OK")
+            else:
+                # Si el header está vacío (o falta), no lo contamos como éxito completo para el conteo final
+                logger.debug(f"Header vacío o faltante devuelto por process_file para {xml_file_path.name}. No contando como éxito completo.")
+                print("OK (pero header vacío/faltante)") 
+                # No ponemos processed_successfully = True
         else:
+            logger.debug(f"process_file devolvió None para {xml_file_path.name}")
             print("Fallo (process_file retornó None)")
-            return False
+            # processed_successfully sigue siendo False
+        
+        return processed_successfully # Retorna True solo si hubo cabecera válida
+            
     except Exception as e:
         print(f"Error ({e})")
         logger.error(f"Error procesando {xml_file_path.name}", exc_info=True)
-        return False
+        return False # No fue exitoso
 
 def main():
-    xml_directory = Path("C:/Users/Raknaros/Desktop/xmlprueba")
+    xml_directory = Path("C:/Users/Raknaros/Desktop/xmlprueba/PROVEEDORES (ENERO - ABRIL)/XML de todos los meses/")
     
     if not xml_directory.is_dir():
         print(f"ERROR: El directorio especificado no existe: {xml_directory}")
@@ -146,7 +164,7 @@ def main():
     print(f"\nProcesamiento completado.")
     print(f"- Archivos ZIP encontrados y procesados: {processed_zips_count}")
     print(f"- Archivos XML encontrados dentro de ZIPs: {processed_xml_in_zip_count}")
-    print(f"- Total archivos XML procesados con éxito (sueltos + en ZIP): {processed_files_count}")
+    print(f"- Total archivos XML con cabecera válida procesada: {processed_files_count}")
 
     # Si se procesaron archivos, combinar y guardar resultados
     if processed_files_count > 0:

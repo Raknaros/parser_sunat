@@ -230,13 +230,17 @@ class FacturaProcessor(BaseXMLProcessor):
                                f"Header: {len(result['header'])} fila(s), "
                                f"Lines: {len(result['lines'])} fila(s), "
                                f"Payment Terms: {len(result['payment_terms'])} fila(s)")
+            # Log de depuración antes de retornar
+            is_header_empty = result['header'].empty if 'header' in result else True
+            self.logger.debug(f"Retornando diccionario para {file_path}. Header empty: {is_header_empty}")
             return result
             
+        except ET.ParseError as e_parse: # Capturar específicamente errores de parseo XML
+            self.log_operation("Procesamiento", "Error", f"Archivo XML mal formado: {file_path}, Error: {e_parse}")
+            self.logger.debug(f"Retornando None debido a ParseError para {file_path}.")
+            return None # Retornar None si el XML no se puede parsear
         except Exception as e:
-            self.log_operation("Procesamiento", "Error", f"Archivo: {file_path}, Error: {str(e)}")
-            # Retorna DataFrames vacíos en caso de excepción general
-            return {
-                'header': pd.DataFrame(),
-                'lines': pd.DataFrame(),
-                'payment_terms': pd.DataFrame()
-            } 
+            self.log_operation("Procesamiento", "Error", f"Error inesperado procesando archivo: {file_path}, Error: {str(e)}")
+            self.logger.debug(f"Retornando None debido a Exception general para {file_path}.")
+            # Retorna None en caso de excepción general inesperada
+            return None 
