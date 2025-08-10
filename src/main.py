@@ -11,22 +11,21 @@ import sys
 from datetime import datetime
 
 def identify_document_type(file_path: Path) -> str:
-    """Identifica el tipo de documento basado en el contenido del XML"""
+    """Identifica el tipo de documento basado en el nombre del archivo"""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read().lower()
-            if 'factura' in content:
-                return 'Factura'
-            elif 'notacredito' in content:
-                return 'NotaCredito'
-            elif 'notadebito' in content:
-                return 'NotaDebito'
-            elif 'guiaremision' in content:
-                return 'GuiaRemision'
-            elif 'boletaventa' in content:
-                return 'BoletaVenta'
-            else:
-                return 'Desconocido'
+        filename = file_path.name.upper()
+        if filename.startswith('FACTURA'):
+            return 'Factura'
+        elif filename.startswith('NOTACREDITO'):
+            return 'NotaCredito' 
+        elif filename.startswith('NOTADEBITO'):
+            return 'NotaDebito'
+        elif filename.startswith('GUIAREMISION'):
+            return 'GuiaRemision'
+        elif filename.startswith('BOLETAVENTA'):
+            return 'BoletaVenta'
+        else:
+            return 'Desconocido'
     except Exception:
         return 'Error'
 
