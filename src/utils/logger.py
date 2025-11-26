@@ -34,4 +34,4 @@ def setup_logger(log_path: Path) -> logging.Logger:
         logger.addHandler(fh)
         logger.addHandler(ch)
     
-    return logger 
+    return logger

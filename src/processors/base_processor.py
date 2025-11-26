@@ -1,29 +1,28 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from pathlib import Path
+from typing import Dict, Optional
 import logging
 from xml.etree import ElementTree as ET
 
 class BaseXMLProcessor(ABC):
     def __init__(self, logger: logging.Logger):
         self.logger = logger
-        
+
     @abstractmethod
-    def process_file(self, file_path: Path) -> pd.DataFrame:
-        """Procesa un archivo XML y retorna un DataFrame con los datos extraídos"""
+    def process_file(self, xml_content: str, file_name: str) -> Optional[Dict[str, pd.DataFrame]]:
+        """Procesa un archivo XML y retorna un diccionario de DataFrames con los datos extraídos"""
         pass
-        
-    def validate_xml(self, file_path: Path) -> bool:
+
+    def validate_xml(self, xml_content: str, file_name: str) -> bool:
         """Valida la estructura básica del archivo XML"""
         try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-            self.log_operation("Validación", "Éxito", f"Archivo: {file_path}")
+            ET.fromstring(xml_content)
+            self.log_operation("Validación", "Éxito", f"Archivo: {file_name}")
             return True
-        except Exception as e:
-            self.log_operation("Validación", "Error", f"Archivo: {file_path}, Error: {str(e)}")
+        except ET.ParseError as e:
+            self.logger.error(f"No se pudo leer el archivo XML {file_name}: {e}")
             return False
-        
-    def log_operation(self, operation: str, status: str, details: str):
+
+    def log_operation(self, operation: str, status: str, details: str, level: int = logging.INFO):
         """Registra una operación en el log"""
-        self.logger.info(f"Operación: {operation} - Estado: {status} - Detalles: {details}") 
+        self.logger.log(level, f"Operación: {operation} - Estado: {status} - Detalles: {details}") 

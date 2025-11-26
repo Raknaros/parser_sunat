@@ -40,3 +40,9 @@ parser_sunat/
  requirements.txt      # Dependencias
  README.md            # Este archivo
 `
+
+PROXIMOS PASOS
+Verificar la muestra de error del log
+Verificar la integridad de la informacion
+Verificar la ejecucion mediante comando
+Elaborar un release de Github, subirlo y completar la version 1.0

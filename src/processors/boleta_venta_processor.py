@@ -4,16 +4,15 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 class BoletaVentaProcessor(BaseXMLProcessor):
-    def process_file(self, file_path: Path) -> pd.DataFrame:
+    def process_file(self, xml_content: str, file_name: str) -> pd.DataFrame:
         """Procesa un archivo XML de Boleta de Venta y extrae sus datos principales"""
-        self.log_operation("Procesamiento", "Iniciado", f"Archivo: {file_path}")
+        self.log_operation("Procesamiento", "Iniciado", f"Archivo: {file_name}")
         
         try:
-            if not self.validate_xml(file_path):
+            if not self.validate_xml(xml_content, file_name):
                 return pd.DataFrame()
                 
-            tree = ET.parse(file_path)
-            root = tree.getroot()
+            root = ET.fromstring(xml_content)
             
             # Extraer datos básicos de la boleta de venta (ajustar según la estructura real)
             data = {
@@ -27,9 +26,9 @@ class BoletaVentaProcessor(BaseXMLProcessor):
             }
             
             df = pd.DataFrame(data)
-            self.log_operation("Procesamiento", "Éxito", f"Archivo: {file_path}")
+            self.log_operation("Procesamiento", "Éxito", f"Archivo: {file_name}")
             return df
             
         except Exception as e:
-            self.log_operation("Procesamiento", "Error", f"Archivo: {file_path}, Error: {str(e)}")
+            self.log_operation("Procesamiento", "Error", f"Archivo: {file_name}, Error: {str(e)}")
             return pd.DataFrame() 
