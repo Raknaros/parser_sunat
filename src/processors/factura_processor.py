@@ -1,10 +1,11 @@
-from .base_processor import BaseXMLProcessor
+from .base_processor import BaseDocumentProcessor
+from utils.xml_utils import get_xml_encoding
 import pandas as pd
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
 
-class FacturaProcessor(BaseXMLProcessor):
+class FacturaProcessor(BaseDocumentProcessor):
     def __init__(self, logger):
         super().__init__(logger)
         # Definir los namespaces utilizados en los documentos XML de SUNAT
@@ -27,21 +28,26 @@ class FacturaProcessor(BaseXMLProcessor):
         found = element.find(xpath, namespaces)
         return found.get(attr_name) if found is not None else None
 
-    def process_file(self, xml_content: str, file_name: str) -> Optional[Dict[str, pd.DataFrame]]:
-        """Procesa un archivo XML de Factura y extrae sus datos en DataFrames separados."""
+    def process_file(self, file_path: str) -> Optional[Dict[str, pd.DataFrame]]:
+        """Procesa un archivo XML de Factura desde su ruta y extrae sus datos."""
+        file_name = Path(file_path).name
         self.log_operation("Procesamiento", "Iniciado", f"Archivo: {file_name}")
-        
-        result = {
-            'header': pd.DataFrame(),
-            'lines': pd.DataFrame(),
-            'payment_terms': pd.DataFrame()
-        }
 
         try:
-            if not self.validate_xml(xml_content, file_name):
-                return result
-                
+            # Leer el contenido del archivo con la codificación correcta
+            encoding = get_xml_encoding(file_path)
+            with open(file_path, 'r', encoding=encoding) as f:
+                xml_content = f.read()
+            
             root = ET.fromstring(xml_content)
+            
+            result = {
+                'header': pd.DataFrame(),
+                'lines': pd.DataFrame(),
+                'payment_terms': pd.DataFrame()
+            }
+
+            # ... (El resto de la lógica de parseo es idéntica a la anterior)
             
             root_tag = root.tag
             root_attrs = root.attrib
@@ -217,4 +223,4 @@ class FacturaProcessor(BaseXMLProcessor):
         except Exception as e:
             self.log_operation("Procesamiento", "Error", f"Error inesperado procesando archivo: {file_name}, Error: {str(e)}")
             self.logger.debug(f"Retornando None debido a Exception general para {file_name}.")
-            return None 
+            return None

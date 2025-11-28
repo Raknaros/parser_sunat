@@ -1,4 +1,5 @@
 import argparse
+import re
 from pathlib import Path
 import pandas as pd
 from utils.logger import setup_logger
@@ -7,48 +8,49 @@ from processors.nota_credito_processor import NotaCreditoProcessor
 from processors.nota_debito_processor import NotaDebitoProcessor
 from processors.guia_remision_processor import GuiaRemisionProcessor
 from processors.boleta_venta_processor import BoletaVentaProcessor
-from utils.xml_utils import get_xml_encoding
+from processors.sire_compras_processor import SireComprasProcessor # <-- Importado
+from processors.base_processor import BaseDocumentProcessor
 import sys
 from datetime import datetime
+from typing import Dict, Tuple, Optional, Pattern, List
 
-def identify_document_type(file_path: Path) -> str:
-    """Identifica el tipo de documento basado en el nombre del archivo"""
-    try:
-        filename = file_path.name.upper()
-        if filename.startswith('FACTURA'):
-            return 'Factura'
-        elif filename.startswith('NOTACREDITO'):
-            return 'NotaCredito' 
-        elif filename.startswith('NOTADEBITO'):
-            return 'NotaDebito'
-        elif filename.startswith('GUIAREMISION'):
-            return 'GuiaRemision'
-        elif filename.startswith('BOLETAVENTA'):
-            return 'BoletaVenta'
-        else:
-            return 'Desconocido'
-    except Exception:
-        return 'Error'
+# Diccionario de reglas de identificación de documentos usando expresiones regulares
+DOCUMENT_RULES: Dict[str, Tuple[Pattern, list]] = {
+    "declaraciones_pagos": (re.compile(r"^DetalleDeclaraciones_(\d{11})_(\d{14})\.(xlsx)$", re.IGNORECASE), ["ruc", "timestamp", "ext"]),
+    "guia_remision_xml": (re.compile(r"^(\d{11})-09-([A-Z0-9]{4})-(\d{1,8})\.(xml)$", re.IGNORECASE), ["ruc", "serie", "correlativo", "ext"]),
+    "sire_compras": (re.compile(r"^(\d{11})-\d{8}-\d{4,6}-propuesta\.(zip|txt)$", re.IGNORECASE), ["ruc"]), # <-- Regla para SIRE
+    "sire_ventas": (re.compile(r"^LE(\d{11})\d{6}1?\d+EXP2\.(zip|txt)$", re.IGNORECASE), ["ruc"]),
+    "factura_xml": (re.compile(r"^FACTURA([A-Z0-9]{4})-?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
+    "boleta_xml": (re.compile(r"^BOLETA([A-Z0-9]{4})-(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
+    "credito_xml": (re.compile(r"^NOTA_CREDITO([A-Z0-9]{4})_?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
+    "debito_xml": (re.compile(r"^NOTA_DEBITO([A-Z0-9]{4})_?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
+    "recibo_xml": (re.compile(r"^RHE(\d{11})(\d{1,8})\.(xml)$", re.IGNORECASE), ["ruc", "correlativo", "ext"]),
+    "reporte_planilla_zip": (re.compile(r"^(\d{11})_([A-Z]{3})+_(\d{8})\.(zip)$", re.IGNORECASE), ["ruc", "codigo", "fecha", "ext"]),
+}
 
-def process_directory(input_path: Path, output_path: Path, logger):
-    """Procesa todos los archivos XML en el directorio especificado"""
+def identify_document_type(file_path: Path) -> Optional[str]:
+    """Identifica el tipo de documento basado en las reglas de expresiones regulares."""
+    filename = file_path.name
+    for doc_type, (pattern, _) in DOCUMENT_RULES.items():
+        if pattern.match(filename):
+            return doc_type
+    return 'desconocido'
+
+def process_directory(input_path: Path, output_path: Path, logger, output_format: str):
+    """Procesa todos los archivos en el directorio especificado."""
     
-    # Crear procesadores
-    processors = {
-        'Factura': FacturaProcessor(logger),
-        'NotaCredito': NotaCreditoProcessor(logger),
-        'NotaDebito': NotaDebitoProcessor(logger),
-        'GuiaRemision': GuiaRemisionProcessor(logger),
-        'BoletaVenta': BoletaVentaProcessor(logger)
+    processors: Dict[str, BaseDocumentProcessor] = {
+        'factura_xml': FacturaProcessor(logger),
+        'credito_xml': NotaCreditoProcessor(logger),
+        'debito_xml': NotaDebitoProcessor(logger),
+        'guia_remision_xml': GuiaRemisionProcessor(logger),
+        'boleta_xml': BoletaVentaProcessor(logger),
+        'sire_compras': SireComprasProcessor(logger), # <-- Registrado
     }
     
-    # Preparar DataFrame para resultados
-    results = {
-        'headers': [],
-        'lines': [],
-        'payments': [] # Y otros que puedan existir
-    }
-    # Estadísticas
+    # Estructura de resultados ahora es más genérica
+    results: Dict[str, List[pd.DataFrame]] = {}
+    
     stats = {
         'total_files': 0,
         'processed_files': 0,
@@ -57,111 +59,91 @@ def process_directory(input_path: Path, output_path: Path, logger):
         'by_type': {}
     }
     
-    # Procesar archivos
-    xml_files = list(input_path.glob('**/*.xml'))
-    stats['total_files'] = len(xml_files)
+    all_files = [p for p in input_path.glob('**/*') if p.is_file()]
+    stats['total_files'] = len(all_files)
     
-    for file_path in xml_files:
+    for file_path in all_files:
         try:
             doc_type = identify_document_type(file_path)
-            
-            # Actualizar estadísticas por tipo
             stats['by_type'][doc_type] = stats['by_type'].get(doc_type, 0) + 1
             
             if doc_type in processors:
-                # Decodificacion dinamica
-                encoding = get_xml_encoding(str(file_path))
-                with open(file_path, 'r', encoding=encoding) as f:
-                    content = f.read()
-
-                # Asumimos que process_file devuelve un diccionario de DataFrames
-                result_dict = processors[doc_type].process_file(content, file_path.name)
+                result_dict = processors[doc_type].process_file(str(file_path))
                 
-                # Verificar si el resultado es un diccionario y si la cabecera no está vacía
-                if result_dict and isinstance(result_dict, dict) and 'header' in result_dict and not result_dict['header'].empty:
-                    results['headers'].append(result_dict['header'])
+                if result_dict and isinstance(result_dict, dict):
+                    # Bucle genérico para consolidar resultados
+                    for key, df in result_dict.items():
+                        if not df.empty:
+                            if key not in results:
+                                results[key] = []
+                            results[key].append(df)
                     
-                    # Añadir líneas y pagos si existen
-                    if 'lines' in result_dict and not result_dict['lines'].empty:
-                        results['lines'].append(result_dict['lines'])
-                    if 'payment_terms' in result_dict and not result_dict['payment_terms'].empty:
-                        results['payments'].append(result_dict['payment_terms'])
-                    # Aquí se podrían añadir más tipos de datos si los procesadores los devuelven
-
                     stats['processed_files'] += 1
                 else:
+                    logger.warning(f"El procesador para '{doc_type}' no devolvió datos para el archivo: {file_path.name}")
                     stats['errors'] += 1
             else:
-                logger.warning(f"No hay procesador para el tipo: {doc_type} - Archivo: {file_path}")
+                logger.warning(f"No hay procesador definido para el tipo: '{doc_type}' - Archivo: {file_path.name}")
                 stats['unknown_files'] += 1
                 
         except Exception as e:
-            logger.error(f"Error procesando {file_path}: {str(e)}")
+            logger.error(f"Error crítico procesando {file_path.name}: {str(e)}", exc_info=True)
             stats['errors'] += 1
     
-    # Generar reporte de datos
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    if results['headers']:
-        final_headers_df = pd.concat(results['headers'], ignore_index=True)
-        output_file = output_path / f'resultados_cabeceras_{timestamp}.csv'
-        final_headers_df.to_csv(output_file, index=False, encoding='utf-8')
-        logger.info(f"Reporte de cabeceras generado: {output_file}")
+    # --- Lógica de Salida Genérica ---
+    if output_format == 'csv':
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Itera sobre todas las claves de resultados recolectados ('headers', 'lines', 'sire_compras', etc.)
+        for result_key, df_list in results.items():
+            if df_list:
+                final_df = pd.concat(df_list, ignore_index=True)
+                # El nombre del archivo de salida se basa en la clave del resultado
+                output_file = output_path / f'resultados_{result_key}_{timestamp}.csv'
+                final_df.to_csv(output_file, index=False, encoding='utf-8')
+                logger.info(f"Reporte '{result_key}' generado: {output_file} con {len(final_df)} filas.")
 
-    if results['lines']:
-        final_lines_df = pd.concat(results['lines'], ignore_index=True)
-        output_file = output_path / f'resultados_lineas_{timestamp}.csv'
-        final_lines_df.to_csv(output_file, index=False, encoding='utf-8')
-        logger.info(f"Reporte de líneas generado: {output_file}")
-
-    if results['payments']:
-        final_payments_df = pd.concat(results['payments'], ignore_index=True)
-        output_file = output_path / f'resultados_pagos_{timestamp}.csv'
-        final_payments_df.to_csv(output_file, index=False, encoding='utf-8')
-        logger.info(f"Reporte de pagos generado: {output_file}")
-    
     # Generar reporte de estadísticas
     stats_df = pd.DataFrame([{
         'Total_Archivos': stats['total_files'],
         'Archivos_Procesados': stats['processed_files'],
         'Errores': stats['errors'],
+        'Desconocidos': stats['unknown_files'],
         **{f'Total_{k}': v for k, v in stats['by_type'].items()}
     }])
     
-    stats_file = output_path / f'estadisticas_{timestamp}.csv'
+    stats_file = output_path / f'estadisticas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
     stats_df.to_csv(stats_file, index=False, encoding='utf-8')
     logger.info(f"Reporte de estadísticas generado: {stats_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Procesador de documentos XML en lote')
-    parser.add_argument('input_dir', type=str, help='Directorio con los archivos XML')
-    parser.add_argument('--output_dir', type=str, default='output', help='Directorio para los resultados')
+    parser = argparse.ArgumentParser(description='Procesador de documentos SUNAT en lote.')
+    parser.add_argument('input_dir', type=str, help='Directorio con los archivos a procesar.')
+    parser.add_argument('--output_dir', type=str, default='output', help='Directorio para los resultados.')
+    parser.add_argument('--output_format', type=str, choices=['csv', 'database'], default='csv', 
+                        help="Formato de salida de los datos procesados ('csv' o 'database').")
     
     args = parser.parse_args()
     
-    # Configurar directorios
     script_dir = Path(__file__).parent.parent
     input_path = Path(args.input_dir)
     output_path = script_dir / args.output_dir
     log_path = script_dir / 'logs'
     
-    # Verificar directorio de entrada
-    if not input_path.exists():
-        print(f"Error: El directorio {input_path} no existe")
+    if not input_path.is_dir():
+        print(f"Error: El directorio de entrada '{input_path}' no existe o no es un directorio.")
         sys.exit(1)
     
-    # Crear directorios de salida y logs si no existen
     output_path.mkdir(parents=True, exist_ok=True)
     log_path.mkdir(parents=True, exist_ok=True)
     
-    # Configurar logger
     logger = setup_logger(log_path)
-    logger.info(f"Iniciando procesamiento - Directorio: {input_path}")
+    logger.info(f"Iniciando procesamiento del directorio: {input_path}")
+    logger.info(f"Formato de salida seleccionado: {args.output_format}")
     
-    # Procesar archivos
-    process_directory(input_path, output_path, logger)
+    process_directory(input_path, output_path, logger, args.output_format)
     
-    logger.info("Procesamiento completado")
+    logger.info("Procesamiento completado.")
 
 if __name__ == '__main__':
     main()
