@@ -16,13 +16,23 @@ class BaseDocumentProcessor(ABC):
     def process_file(self, file_path: str) -> Optional[Dict[str, pd.DataFrame]]:
         """
         Procesa un archivo a partir de su ruta y retorna un diccionario de DataFrames.
+        """
+        pass
+
+    @abstractmethod
+    def get_db_mapping(self) -> Dict[str, Dict]:
+        """
+        Retorna el mapeo de los DataFrames generados a las tablas y columnas de la BD.
         
-        Args:
-            file_path: La ruta completa del archivo a procesar.
-            
-        Returns:
-            Un diccionario donde las claves son los nombres de las tablas (ej. 'header', 'lines')
-            y los valores son los DataFrames correspondientes. Retorna None si el procesamiento falla.
+        Ejemplo:
+        {
+            'header': {
+                'table': 'cabeceras', 
+                'schema': 'public',
+                'columns': {'df_col_1': 'db_col_1', ...}
+            },
+            'lines': { ... }
+        }
         """
         pass
 
