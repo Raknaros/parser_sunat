@@ -28,6 +28,8 @@ class SireComprasProcessor(BaseDocumentProcessor):
             'Serie CP Modificado': 'numero_serie_modificado',
             'Nro CP Modificado': 'numero_correlativo_modificado',
             'Detracción': 'tasa_detraccion',
+            'CUI': 'cui', 'destino': 'destino', 'valor': 'valor', 'igv': 'igv',
+            'otros_cargos': 'otros_cargos', 'tipo_operacion': 'tipo_operacion'
         }
         self.FINAL_COLUMNS = [
             'ruc', 'periodo_tributario', 'observaciones', 'fecha_emision', 'fecha_vencimiento',
@@ -100,11 +102,18 @@ class SireComprasProcessor(BaseDocumentProcessor):
     def _transform_data(self, df: pd.DataFrame) -> pd.DataFrame:
         self._aplicar_filtro_complejo(df)
         self._convert_data_types(df)
-        df.rename(columns=self.RENAME_MAP, inplace=True)
-        df['cui'] = df.apply(
+        
+        df['CUI'] = df.apply(
             lambda row: self._generate_cui(
-                row.get('ruc'), row.get('tipo_comprobante'), row.get('numero_serie'),
-                row.get('numero_correlativo')), axis=1)
+                row.get('Tipo CP/Doc.'),
+                row.get('RUC'),
+                row.get('Nro Doc Identidad'),
+                row.get('Serie del CDP'),
+                row.get('Nro CP o Doc. Nro Inicial (Rango)')
+            ), axis=1)
+        
+        df.rename(columns=self.RENAME_MAP, inplace=True)
+        
         final_df = df[[col for col in self.FINAL_COLUMNS if col in df.columns]].copy()
         return final_df
 
@@ -140,16 +149,23 @@ class SireComprasProcessor(BaseDocumentProcessor):
             df['Fecha Vcto/Pago'] = pd.to_datetime(df['Fecha Vcto/Pago'], format='%d/%m/%Y', errors='coerce')
         if 'Periodo' in df.columns:
             df['Periodo'] = pd.to_datetime(df['Periodo'], format='%Y%m', errors='coerce').dt.strftime('%Y%m')
-        # --- REGLA DE DETRACCIÓN AÑADIDA ---
         if 'Detracción' in df.columns:
             df['Detracción'] = df['Detracción'].replace('D', 0)
             df['Detracción'] = pd.to_numeric(df['Detracción'], errors='coerce')
 
-    def _generate_cui(self, ruc, tipo_doc, serie, numero):
-        if pd.isna(ruc) or pd.isna(tipo_doc) or pd.isna(serie) or pd.isna(numero): return None
+    def _generate_cui(self, tipo_comprobante, ruc_empresa, ruc_proveedor, serie, numero):
+        if pd.isna(tipo_comprobante) or pd.isna(serie) or pd.isna(numero): return None
         try:
+            tipo_comprobante_str = str(tipo_comprobante).strip()
+            if tipo_comprobante_str == '53':
+                if pd.isna(ruc_empresa): return None
+                ruc_hex = hex(int(ruc_empresa))[2:].lower()
+            else:
+                if pd.isna(ruc_proveedor): return None
+                ruc_hex = hex(int(ruc_proveedor))[2:].lower()
             serie_fmt = str(serie).strip()
             numero_fmt = str(numero).strip()
             full_numero = f"{serie_fmt}-{numero_fmt}"
-            return f"{hex(int(ruc))[2:].lower()}{int(tipo_doc):02d}{full_numero.replace('-', '')}"
-        except (ValueError, TypeError): return None
+            return f"{ruc_hex}{int(float(tipo_comprobante_str)):02d}{full_numero.replace('-', '')}"
+        except (ValueError, TypeError):
+            return None
