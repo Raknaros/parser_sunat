@@ -12,32 +12,50 @@ class SireComprasProcessor(BaseDocumentProcessor):
     def __init__(self, logger: logging.Logger):
         super().__init__(logger)
         self.RENAME_MAP = {
-            'RUC': 'ruc', 'Periodo': 'periodo_tributario', 'CAR SUNAT': 'observaciones',
-            'Fecha de emisión': 'fecha_emision', 'Fecha Vcto/Pago': 'fecha_vencimiento',
-            'Tipo CP/Doc.': 'tipo_comprobante', 'Serie del CDP': 'numero_serie',
+            'RUC': 'ruc',
+            'Apellidos y Nombres o Razón social': 'nombre_receptor',
+            'Periodo': 'periodo_tributario',
+            'CAR SUNAT': 'observaciones',
+            'Fecha de emisión': 'fecha_emision',
+            'Fecha Vcto/Pago': 'fecha_vencimiento',
+            'Tipo CP/Doc.': 'tipo_comprobante',
+            'Serie del CDP': 'numero_serie',
+            'Año': 'ano',
             'Nro CP o Doc. Nro Inicial (Rango)': 'numero_correlativo',
-            'Tipo Doc Identidad': 'tipo_documento', 'Nro Doc Identidad': 'numero_documento',
-            'Apellidos y Nombres, Denominación o Razón Social': 'nombre_receptor',
-            'BI Gravado DG': 'bi_gravado_dg', 'IGV / IPM DG': 'igv_dg',
-            'BI Gravado DGNG': 'bi_gravado_dgng', 'IGV / IPM DGNG': 'igv_dgng',
-            'BI Gravado DNG': 'bi_gravado_dng', 'IGV / IPM DNG': 'igv_dng',
-            'Valor Adq. NG': 'valor_adq_ng', 'ISC': 'isc', 'ICBPER': 'icbp',
-            'Otros Trib/ Cargos': 'otros_cargos_base', 'Importe Total': 'importe_total',
-            'Moneda': 'tipo_moneda', 'Tipo de Cambio': 'tipo_cambio',
+            'Nro Final (Rango)': 'numero_final',
+            'Tipo Doc Identidad': 'tipo_documento',
+            'Nro Doc Identidad': 'numero_documento',
+            'Apellidos Nombres/ Razón  Social': 'nombre_razon',
+            'BI Gravado DG': 'bi_gravado_dg',
+            'IGV / IPM DG': 'igv_gravado_dg',
+            'BI Gravado DGNG': 'bi_gravado_dgng',
+            'IGV / IPM DGNG': 'igv_gravado_dgng',
+            'BI Gravado DNG': 'bi_gravado_dng',
+            'IGV / IPM DNG': 'igv_dng',
+            'Valor Adq. NG': 'valor_adq_ng',
+            'ISC': 'isc',
+            'ICBPER': 'icbp',
+            'Otros Trib/ Cargos': 'otros_cargos',
+            'Total CP': 'importe_total',
+            'Moneda': 'tipo_moneda',
+            'Tipo de Cambio': 'tipo_cambio',
+            'Fecha Emisión Doc Modificado': 'fecha_comprobante_modificado',
             'Tipo CP Modificado': 'tipo_comprobante_modificado',
             'Serie CP Modificado': 'numero_serie_modificado',
+            'COD. DAM O DSI': 'dam',
             'Nro CP Modificado': 'numero_correlativo_modificado',
-            'Detracción': 'tasa_detraccion',
-            'CUI': 'cui', 'destino': 'destino', 'valor': 'valor', 'igv': 'igv',
-            'otros_cargos': 'otros_cargos', 'tipo_operacion': 'tipo_operacion'
+            'Clasif de Bss y Sss': 'clasificacion_bienes_servicios',
+            'ID Proyecto Operadores': 'proyecto_operadores',
+            'PorcPart': 'porc_part',
+            'IMB': 'imb',
+            'CAR Orig/ Ind E o I': 'car_original',
+            'Detracción': 'detraccion',
+            'Tipo de Nota': 'tipo_nota',
+            'Est. Comp.': 'estado_comprobante',
+            'Incal': 'incal'
         }
-        self.FINAL_COLUMNS = [
-            'ruc', 'periodo_tributario', 'observaciones', 'fecha_emision', 'fecha_vencimiento',
-            'tipo_comprobante', 'numero_serie', 'numero_correlativo', 'tipo_documento',
-            'numero_documento', 'nombre_receptor', 'importe_total', 'isc', 'icbp', 'tipo_moneda', 'tipo_cambio',
-            'tipo_comprobante_modificado', 'numero_serie_modificado', 'numero_correlativo_modificado', 'tasa_detraccion',
-            'destino', 'valor', 'igv', 'otros_cargos', 'tipo_operacion', 'cui'
-        ]
+        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui', 'destino', 'valor', 'igv', 'tipo_operacion']
+
 
     def get_db_mapping(self) -> Dict[str, Dict]:
         final_mapping = {col: col for col in self.FINAL_COLUMNS}
@@ -92,6 +110,10 @@ class SireComprasProcessor(BaseDocumentProcessor):
             if len(lines) < 2: return None
             
             header = [h.strip() for h in lines[0].split('|')]
+            self.logger.info(f"Encabezados leídos del archivo: {header}")
+            for h in header:
+                self.logger.info(f"Encabezado: '{h}' - Caracteres: {[ord(c) for c in h]}")
+
             data = StringIO('\n'.join(lines[1:]))
             df = pd.read_csv(data, sep='|', header=None, names=header, dtype=str)
             return df
@@ -100,41 +122,41 @@ class SireComprasProcessor(BaseDocumentProcessor):
             return None
 
     def _transform_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.rename(columns=self.RENAME_MAP, inplace=True)
+        
         self._aplicar_filtro_complejo(df)
         self._convert_data_types(df)
         
-        df['CUI'] = df.apply(
+        df['cui'] = df.apply(
             lambda row: self._generate_cui(
-                row.get('Tipo CP/Doc.'),
-                row.get('RUC'),
-                row.get('Nro Doc Identidad'),
-                row.get('Serie del CDP'),
-                row.get('Nro CP o Doc. Nro Inicial (Rango)')
+                row.get('tipo_comprobante'),
+                row.get('ruc'),
+                row.get('numero_documento'),
+                row.get('numero_serie'),
+                row.get('numero_correlativo')
             ), axis=1)
-        
-        df.rename(columns=self.RENAME_MAP, inplace=True)
         
         final_df = df[[col for col in self.FINAL_COLUMNS if col in df.columns]].copy()
         return final_df
 
     def _aplicar_filtro_complejo(self, df: pd.DataFrame) -> None:
-        columnas_valor = ['BI Gravado DG', 'IGV / IPM DG', 'BI Gravado DGNG', 'IGV / IPM DGNG',
-                          'BI Gravado DNG', 'IGV / IPM DNG', 'Valor Adq. NG', 'Otros Trib/ Cargos']
+        columnas_valor = ['bi_gravado_dg', 'igv_gravado_dg', 'bi_gravado_dgng', 'igv_gravado_dgng',
+                          'bi_gravado_dng', 'igv_dng', 'valor_adq_ng', 'otros_cargos']
         for col in columnas_valor:
             if col not in df.columns: df[col] = 0
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        cond_destino_5 = ((df['BI Gravado DG'] > 0) | (df['BI Gravado DGNG'] > 0) | (df['BI Gravado DNG'] > 0)) & (df['Valor Adq. NG'] > 0)
-        cond_destino_1 = (df['BI Gravado DG'] > 0)
-        cond_destino_2 = (df['BI Gravado DGNG'] > 0)
-        cond_destino_3 = (df['BI Gravado DNG'] > 0)
-        cond_destino_4 = (df['Valor Adq. NG'] > 0)
+        cond_destino_5 = ((df['bi_gravado_dg'] > 0) | (df['bi_gravado_dgng'] > 0) | (df['bi_gravado_dng'] > 0)) & (df['valor_adq_ng'] > 0)
+        cond_destino_1 = (df['bi_gravado_dg'] > 0)
+        cond_destino_2 = (df['bi_gravado_dgng'] > 0)
+        cond_destino_3 = (df['bi_gravado_dng'] > 0)
+        cond_destino_4 = (df['valor_adq_ng'] > 0)
         condiciones = [cond_destino_5, cond_destino_1, cond_destino_2, cond_destino_3, cond_destino_4]
         
         resultados_destino = [5, 1, 2, 3, 4]
-        resultados_valor = [df['BI Gravado DG'] + df['BI Gravado DGNG'] + df['BI Gravado DNG'], df['BI Gravado DG'], df['BI Gravado DGNG'], df['BI Gravado DNG'], df['Valor Adq. NG']]
-        resultados_igv = [df['IGV / IPM DG'] + df['IGV / IPM DGNG'] + df['IGV / IPM DNG'], df['IGV / IPM DG'], df['IGV / IPM DGNG'], df['IGV / IPM DNG'], 0]
-        resultados_otros = [df['Otros Trib/ Cargos'] + df['Valor Adq. NG'], df['Otros Trib/ Cargos'], df['Otros Trib/ Cargos'], df['Otros Trib/ Cargos'], df['Otros Trib/ Cargos']]
+        resultados_valor = [df['bi_gravado_dg'] + df['bi_gravado_dgng'] + df['bi_gravado_dng'], df['bi_gravado_dg'], df['bi_gravado_dgng'], df['bi_gravado_dng'], df['valor_adq_ng']]
+        resultados_igv = [df['igv_gravado_dg'] + df['igv_gravado_dgng'] + df['igv_dng'], df['igv_gravado_dg'], df['igv_gravado_dgng'], df['igv_dng'], 0]
+        resultados_otros = [df['otros_cargos'] + df['valor_adq_ng'], df['otros_cargos'], df['otros_cargos'], df['otros_cargos'], df['otros_cargos']]
         
         df['destino'] = np.select(condiciones, resultados_destino, default=0)
         df['valor'] = np.select(condiciones, resultados_valor, default=0)
@@ -143,15 +165,15 @@ class SireComprasProcessor(BaseDocumentProcessor):
         df['tipo_operacion'] = 2
 
     def _convert_data_types(self, df: pd.DataFrame) -> None:
-        if 'Fecha de emisión' in df.columns:
-            df['Fecha de emisión'] = pd.to_datetime(df['Fecha de emisión'], format='%d/%m/%Y', errors='coerce')
-        if 'Fecha Vcto/Pago' in df.columns:
-            df['Fecha Vcto/Pago'] = pd.to_datetime(df['Fecha Vcto/Pago'], format='%d/%m/%Y', errors='coerce')
-        if 'Periodo' in df.columns:
-            df['Periodo'] = pd.to_datetime(df['Periodo'], format='%Y%m', errors='coerce').dt.strftime('%Y%m')
-        if 'Detracción' in df.columns:
-            df['Detracción'] = df['Detracción'].replace('D', 0)
-            df['Detracción'] = pd.to_numeric(df['Detracción'], errors='coerce')
+        if 'fecha_emision' in df.columns:
+            df['fecha_emision'] = pd.to_datetime(df['fecha_emision'], format='%d/%m/%Y', errors='coerce')
+        if 'fecha_vencimiento' in df.columns:
+            df['fecha_vencimiento'] = pd.to_datetime(df['fecha_vencimiento'], format='%d/%m/%Y', errors='coerce')
+        if 'periodo_tributario' in df.columns:
+            df['periodo_tributario'] = pd.to_datetime(df['periodo_tributario'], format='%Y%m', errors='coerce').dt.strftime('%Y%m')
+        if 'detraccion' in df.columns:
+            df['detraccion'] = df['detraccion'].replace('D', 0)
+            df['detraccion'] = pd.to_numeric(df['detraccion'], errors='coerce')
 
     def _generate_cui(self, tipo_comprobante, ruc_empresa, ruc_proveedor, serie, numero):
         if pd.isna(tipo_comprobante) or pd.isna(serie) or pd.isna(numero): return None
