@@ -4,6 +4,7 @@ import pandas as pd
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
+import logging
 
 class FacturaProcessor(BaseDocumentProcessor):
     def __init__(self, logger):
@@ -16,50 +17,31 @@ class FacturaProcessor(BaseDocumentProcessor):
         }
 
     def get_db_mapping(self) -> Dict[str, Dict]:
-        # Asumiendo un esquema 'public' y nombres de tabla 'cabeceras', 'lineas', 'pagos'
         return {
             'header': {
                 'table': 'cabeceras',
                 'schema': 'public',
                 'columns': {
-                    'CUI': 'cui',
-                    'numero': 'numero_documento',
-                    'fecha_emision': 'fecha_emision',
-                    'tipo_documento': 'tipo_documento_id',
-                    'moneda': 'moneda_id',
-                    'ruc_emisor': 'ruc_emisor',
-                    'nombre_emisor': 'nombre_emisor',
-                    'ruc_receptor': 'ruc_receptor',
-                    'nombre_receptor': 'nombre_receptor',
-                    'importe_total': 'importe_total',
-                    'total_igv': 'total_igv',
-                    'total_isc': 'total_isc',
+                    'CUI': 'cui', 'numero': 'numero_documento', 'fecha_emision': 'fecha_emision',
+                    'tipo_documento': 'tipo_documento_id', 'moneda': 'moneda_id', 'ruc_emisor': 'ruc_emisor',
+                    'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'nombre_receptor': 'nombre_receptor',
+                    'importe_total': 'importe_total', 'total_igv': 'total_igv', 'total_isc': 'total_isc',
                     'total_otros_tributos': 'total_otros_tributos',
                 }
             },
             'lines': {
-                'table': 'lineas',
-                'schema': 'public',
+                'table': 'lineas', 'schema': 'public',
                 'columns': {
-                    'CUI': 'cui_relacionado',
-                    'linea_id': 'linea_id',
-                    'cantidad': 'cantidad',
-                    'unidad': 'unidad_medida',
-                    'descripcion': 'descripcion',
-                    'precio_unitario': 'precio_unitario',
-                    'subtotal': 'subtotal',
-                    'linea_igv': 'igv',
+                    'CUI': 'cui_relacionado', 'linea_id': 'linea_id', 'cantidad': 'cantidad',
+                    'unidad': 'unidad_medida', 'descripcion': 'descripcion', 'precio_unitario': 'precio_unitario',
+                    'subtotal': 'subtotal', 'linea_igv': 'igv',
                 }
             },
             'payment_terms': {
-                'table': 'pagos',
-                'schema': 'public',
+                'table': 'pagos', 'schema': 'public',
                 'columns': {
-                    'CUI': 'cui_relacionado',
-                    'forma_pago_id': 'forma_pago_id',
-                    'monto_pago': 'monto',
-                    'moneda_pago': 'moneda_id',
-                    'fecha_vencimiento': 'fecha_vencimiento',
+                    'CUI': 'cui_relacionado', 'forma_pago_id': 'forma_pago_id', 'monto_pago': 'monto',
+                    'moneda_pago': 'moneda_id', 'fecha_vencimiento': 'fecha_vencimiento',
                 }
             }
         }
@@ -116,7 +98,7 @@ class FacturaProcessor(BaseDocumentProcessor):
                         elif tax_code == '2000': invoice_data['total_isc'] = tax_amount
                         elif tax_code == '9999': invoice_data['total_otros_tributos'] = tax_amount
             
-            cui = self._generate_cui(invoice_data, file_name)
+            cui = self._generate_cui(invoice_data)
             invoice_data['CUI'] = cui
             
             result['header'] = pd.DataFrame([invoice_data])
@@ -138,13 +120,13 @@ class FacturaProcessor(BaseDocumentProcessor):
             self.log_operation("Procesamiento", "Error", f"Error procesando archivo: {file_name}, Error: {str(e)}", level=logging.ERROR)
             return None
 
-    def _generate_cui(self, data, file_name):
+    def _generate_cui(self, data):
         ruc_emisor = data.get('ruc_emisor')
         tipo_doc = data.get('tipo_documento')
         numero_factura = data.get('numero')
         if ruc_emisor and tipo_doc and numero_factura:
             try:
-                return f"{hex(int(ruc_emisor))[2:].upper()}{int(tipo_doc):02d}{numero_factura.replace('-', '')}"
+                return f"{hex(int(ruc_emisor))[2:].lower()}{int(tipo_doc):02d}{numero_factura.replace('-', '')}"
             except (ValueError, TypeError):
                 self.logger.warning(f"No se pudo generar CUI para {numero_factura}")
         return None

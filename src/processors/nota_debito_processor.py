@@ -6,6 +6,26 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Optional
 
 class NotaDebitoProcessor(BaseDocumentProcessor):
+    def get_db_mapping(self) -> Dict[str, Dict]:
+        """
+        Retorna el mapeo de los DataFrames generados a las tablas y columnas de la BD.
+        """
+        return {
+            'header': {
+                'table': 'cabeceras',
+                'schema': 'public',
+                'columns': {
+                    'tipo_documento': 'tipo_documento_id',
+                    'numero': 'numero_documento',
+                    'fecha_emision': 'fecha_emision',
+                    'ruc_emisor': 'ruc_emisor',
+                    'doc_referencia': 'documento_referencia',
+                    'motivo': 'motivo',
+                    'total': 'importe_total',
+                }
+            }
+        }
+
     def process_file(self, file_path: str) -> Optional[Dict[str, pd.DataFrame]]:
         """Procesa un archivo XML de Nota de Débito y extrae sus datos principales."""
         file_name = Path(file_path).name
