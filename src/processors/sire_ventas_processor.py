@@ -181,23 +181,20 @@ class SireVentasProcessor(BaseDocumentProcessor):
         int_columns = ['periodo_tributario', 'tipo_comprobante', 'destino', 'tipo_comprobante_modificado', 'numero_final']
         for col in int_columns:
             if col in df.columns:
-                if col == 'periodo_tributario':
-                    df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y%m')
-                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
-                else:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
 
         date_columns = ['fecha_emision', 'fecha_vencimiento', 'fecha_comprobante_modificado']
         for col in date_columns:
             if col in df.columns: 
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
+                df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce').dt.date
 
         varchar_columns = ['numero_serie', 'numero_correlativo', 'tipo_documento', 'numero_documento', 'tipo_moneda', 
                            'numero_serie_modificado', 'numero_correlativo_modificado', 'observaciones', 'cui', 'nombre_emisor', 
                            'nombre_razon', 'proyecto_operadores', 'tipo_nota', 'estado_comprobante', 'dam', 'clu']
         for col in varchar_columns:
-            if col in df.columns: 
-                df[col] = df[col].astype(str).replace('nan', np.nan)
+            if col in df.columns:
+                df[col] = df[col].astype(str)
+                df.loc[df[col] == 'nan', col] = np.nan
 
         numeric_columns = ['valor', 'igv', 'icbp', 'isc', 'otros_cargos', 'exportacion', 'bi_gravada', 'descuento_bi', 
                            'base_igv', 'descuento_igv', 'exonerado', 'inafecto', 'bi_ivap', 'ivap', 'base_otros_cargos', 

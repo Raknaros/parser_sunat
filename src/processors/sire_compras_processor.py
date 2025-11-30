@@ -102,7 +102,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
         try:
             content_bytes = file_obj.read()
             try:
-                content = content_bytes.decode('utf-8')
+                content = content_bytes.decode('utf-8-sig')
             except UnicodeDecodeError:
                 content = content_bytes.decode('latin-1', errors='replace')
             
@@ -110,10 +110,6 @@ class SireComprasProcessor(BaseDocumentProcessor):
             if len(lines) < 2: return None
             
             header = [h.strip() for h in lines[0].split('|')]
-            self.logger.info(f"Encabezados leídos del archivo: {header}")
-            for h in header:
-                self.logger.info(f"Encabezado: '{h}' - Caracteres: {[ord(c) for c in h]}")
-
             data = StringIO('\n'.join(lines[1:]))
             df = pd.read_csv(data, sep='|', header=None, names=header, dtype=str)
             return df
@@ -165,15 +161,34 @@ class SireComprasProcessor(BaseDocumentProcessor):
         df['tipo_operacion'] = 2
 
     def _convert_data_types(self, df: pd.DataFrame) -> None:
-        if 'fecha_emision' in df.columns:
-            df['fecha_emision'] = pd.to_datetime(df['fecha_emision'], format='%d/%m/%Y', errors='coerce')
-        if 'fecha_vencimiento' in df.columns:
-            df['fecha_vencimiento'] = pd.to_datetime(df['fecha_vencimiento'], format='%d/%m/%Y', errors='coerce')
-        if 'periodo_tributario' in df.columns:
-            df['periodo_tributario'] = pd.to_datetime(df['periodo_tributario'], format='%Y%m', errors='coerce').dt.strftime('%Y%m')
-        if 'detraccion' in df.columns:
-            df['detraccion'] = df['detraccion'].replace('D', 0)
-            df['detraccion'] = pd.to_numeric(df['detraccion'], errors='coerce')
+        if 'ruc' in df.columns: df['ruc'] = pd.to_numeric(df['ruc'], errors='coerce').astype('Int64')
+
+        int_columns = ['periodo_tributario', 'tipo_comprobante', 'destino', 'ano', 'numero_final', 'tipo_documento', 'tipo_comprobante_modificado']
+        for col in int_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
+
+        date_columns = ['fecha_emision', 'fecha_vencimiento', 'fecha_comprobante_modificado']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce').dt.date
+
+        varchar_columns = ['numero_serie', 'numero_correlativo', 'numero_documento', 'nombre_receptor', 'nombre_razon', 
+                           'tipo_moneda', 'numero_serie_modificado', 'numero_correlativo_modificado', 'dam', 
+                           'clasificacion_bienes_servicios', 'proyecto_operadores', 'car_original', 'tipo_nota', 
+                           'estado_comprobante', 'incal', 'cui']
+        for col in varchar_columns:
+            if col in df.columns:
+                df[col] = df[col].astype(str)
+                df.loc[df[col] == 'nan', col] = np.nan
+
+        numeric_columns = ['bi_gravado_dg', 'igv_gravado_dg', 'bi_gravado_dgng', 'igv_gravado_dgng', 'bi_gravado_dng', 
+                           'igv_dng', 'valor_adq_ng', 'isc', 'icbp', 'otros_cargos', 'importe_total', 'tipo_cambio', 
+                           'porc_part', 'imb', 'detraccion', 'valor', 'igv']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').round(2)
+
 
     def _generate_cui(self, tipo_comprobante, ruc_empresa, ruc_proveedor, serie, numero):
         if pd.isna(tipo_comprobante) or pd.isna(serie) or pd.isna(numero): return None
