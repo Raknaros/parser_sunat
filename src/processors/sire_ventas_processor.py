@@ -49,11 +49,11 @@ class SireVentasProcessor(BaseDocumentProcessor):
             'Est. Comp': 'estado_comprobante',
             'Valor FOB Embarcado': 'fob_embarcado',
             'Valor OP Gratuitas': 'gratuitas',
-            'Tipo Operación': 'tipo_operacion',
+            'Tipo Operación': 'tipo_operacion_sire',
             'DAM / CP': 'dam',
             'CLU': 'clu'
         }
-        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui', 'destino', 'valor', 'igv', 'otros_cargos']
+        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui', 'destino', 'valor', 'igv', 'otros_cargos', 'tipo_operacion']
 
     def get_db_mapping(self) -> Dict[str, Dict]:
         final_mapping = {col: col for col in self.FINAL_COLUMNS}
