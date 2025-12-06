@@ -25,16 +25,19 @@ class FacturaProcessor(BaseDocumentProcessor):
                     'CUI': 'cui', 'numero': 'numero_documento', 'fecha_emision': 'fecha_emision',
                     'tipo_documento': 'tipo_documento_id', 'moneda': 'moneda_id', 'ruc_emisor': 'ruc_emisor',
                     'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'nombre_receptor': 'nombre_receptor',
-                    'importe_total': 'importe_total', 'total_igv': 'total_igv', 'total_isc': 'total_isc',
-                    'total_otros_tributos': 'total_otros_tributos',
+                    'importe_total': 'importe_total', 'total_descuentos': 'total_descuentos',
+                    'total_otros_cargos': 'total_otros_cargos', 'total_anticipos': 'total_anticipos',
+                    'total_igv': 'total_igv', 'total_isc': 'total_isc', 'total_otros_tributos': 'total_otros_tributos',
+                    'total_exonerado': 'total_exonerado', 'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito'
                 }
             },
             'lines': {
                 'table': 'lineas', 'schema': 'public',
                 'columns': {
                     'CUI': 'cui_relacionado', 'linea_id': 'linea_id', 'cantidad': 'cantidad',
-                    'unidad': 'unidad_medida', 'descripcion': 'descripcion', 'precio_unitario': 'precio_unitario',
-                    'subtotal': 'subtotal', 'linea_igv': 'igv',
+                    'unidad': 'unidad_medida', 'descripcion': 'descripcion', 'codigo_producto': 'codigo_producto',
+                    'precio_unitario': 'precio_unitario', 'subtotal': 'subtotal', 'linea_igv': 'igv',
+                    'linea_igv_porcentaje': 'igv_porcentaje'
                 }
             },
             'payment_terms': {
@@ -42,6 +45,12 @@ class FacturaProcessor(BaseDocumentProcessor):
                 'columns': {
                     'CUI': 'cui_relacionado', 'forma_pago_id': 'forma_pago_id', 'monto_pago': 'monto',
                     'moneda_pago': 'moneda_id', 'fecha_vencimiento': 'fecha_vencimiento',
+                }
+            },
+            'despatch_references': {
+                'table': 'guias_referencia', 'schema': 'public',
+                'columns': {
+                    'CUI': 'cui_relacionado', 'guia_numero': 'guia_numero', 'guia_tipo_documento': 'guia_tipo_documento'
                 }
             }
         }
@@ -65,7 +74,7 @@ class FacturaProcessor(BaseDocumentProcessor):
             
             root = ET.fromstring(xml_content)
             
-            result = {'header': pd.DataFrame(), 'lines': pd.DataFrame(), 'payment_terms': pd.DataFrame()}
+            result = {'header': pd.DataFrame(), 'lines': pd.DataFrame(), 'payment_terms': pd.DataFrame(), 'despatch_references': pd.DataFrame()}
             
             invoice_data = {}
             invoice_data['numero'] = self.safe_find_text(root, './/cbc:ID', self.NAMESPACES)
@@ -86,17 +95,32 @@ class FacturaProcessor(BaseDocumentProcessor):
             legal_monetary = root.find('.//cac:LegalMonetaryTotal', self.NAMESPACES)
             if legal_monetary:
                 invoice_data['importe_total'] = self.safe_find_text(legal_monetary, './/cbc:PayableAmount', self.NAMESPACES)
+                invoice_data['total_descuentos'] = self.safe_find_text(legal_monetary, './/cbc:AllowanceTotalAmount', self.NAMESPACES)
+                invoice_data['total_otros_cargos'] = self.safe_find_text(legal_monetary, './/cbc:ChargeTotalAmount', self.NAMESPACES)
+                invoice_data['total_anticipos'] = self.safe_find_text(legal_monetary, './/cbc:PrepaidAmount', self.NAMESPACES)
 
             tax_total = root.find('.//cac:TaxTotal', self.NAMESPACES)
             if tax_total:
+                invoice_data['total_igv'] = None
+                invoice_data['total_isc'] = None
+                invoice_data['total_otros_tributos'] = None
+                invoice_data['total_exonerado'] = None
+                invoice_data['total_inafecto'] = None
+                invoice_data['total_gratuito'] = None
+                
                 for tax_subtotal in tax_total.findall('.//cac:TaxSubtotal', self.NAMESPACES):
                     tax_scheme = tax_subtotal.find('.//cac:TaxCategory/cac:TaxScheme/cbc:ID', self.NAMESPACES)
                     if tax_scheme is not None:
                         tax_code = tax_scheme.text
                         tax_amount = self.safe_find_text(tax_subtotal, './/cbc:TaxAmount', self.NAMESPACES)
+                        taxable_amount = self.safe_find_text(tax_subtotal, './/cbc:TaxableAmount', self.NAMESPACES)
+
                         if tax_code == '1000': invoice_data['total_igv'] = tax_amount
                         elif tax_code == '2000': invoice_data['total_isc'] = tax_amount
                         elif tax_code == '9999': invoice_data['total_otros_tributos'] = tax_amount
+                        elif tax_code == '9997': invoice_data['total_exonerado'] = taxable_amount
+                        elif tax_code == '9998': invoice_data['total_inafecto'] = taxable_amount
+                        elif tax_code == '9996': invoice_data['total_gratuito'] = taxable_amount
             
             cui = self._generate_cui(invoice_data)
             invoice_data['CUI'] = cui
@@ -113,6 +137,16 @@ class FacturaProcessor(BaseDocumentProcessor):
                 pt_list = [self._process_payment_term(pt, cui) for pt in payment_terms]
                 result['payment_terms'] = pd.DataFrame(pt_list)
             
+            despatch_references = root.findall('.//cac:DespatchDocumentReference', self.NAMESPACES)
+            if despatch_references:
+                dr_list = []
+                for dr in despatch_references:
+                    dr_data = {'CUI': cui}
+                    dr_data['guia_numero'] = self.safe_find_text(dr, './/cbc:ID', self.NAMESPACES)
+                    dr_data['guia_tipo_documento'] = self.safe_find_text(dr, './/cbc:DocumentTypeCode', self.NAMESPACES)
+                    dr_list.append(dr_data)
+                result['despatch_references'] = pd.DataFrame(dr_list)
+
             self.log_operation("Procesamiento", "Éxito", f"Archivo: {file_name}, CUI: {cui}")
             return result
             
@@ -137,13 +171,15 @@ class FacturaProcessor(BaseDocumentProcessor):
         line_data['cantidad'] = self.safe_find_text(line, './/cbc:InvoicedQuantity', self.NAMESPACES)
         line_data['unidad'] = self.safe_find_attr(line, './/cbc:InvoicedQuantity', 'unitCode', self.NAMESPACES)
         line_data['descripcion'] = self.safe_find_text(line, './/cac:Item/cbc:Description', self.NAMESPACES)
+        line_data['codigo_producto'] = self.safe_find_text(line, './/cac:Item/cac:SellersItemIdentification/cbc:ID', self.NAMESPACES)
         line_data['precio_unitario'] = self.safe_find_text(line, './/cac:Price/cbc:PriceAmount', self.NAMESPACES)
         line_data['subtotal'] = self.safe_find_text(line, './/cbc:LineExtensionAmount', self.NAMESPACES)
         tax_total = line.find('.//cac:TaxTotal', self.NAMESPACES)
         if tax_total:
-            tax_subtotal = tax_total.find('.//cac:TaxSubtotal', self.NAMESPACES)
+            tax_subtotal = tax_total.find('.//cac:TaxSubtotal', self.NAMESPaces)
             if tax_subtotal:
                 line_data['linea_igv'] = self.safe_find_text(tax_subtotal, './/cbc:TaxAmount', self.NAMESPACES)
+                line_data['linea_igv_porcentaje'] = self.safe_find_text(tax_subtotal, './/cac:TaxCategory/cbc:Percent', self.NAMESPACES)
         return line_data
 
     def _process_payment_term(self, pt_node, cui):
