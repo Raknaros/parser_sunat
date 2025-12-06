@@ -176,7 +176,7 @@ class FacturaProcessor(BaseDocumentProcessor):
         line_data['subtotal'] = self.safe_find_text(line, './/cbc:LineExtensionAmount', self.NAMESPACES)
         tax_total = line.find('.//cac:TaxTotal', self.NAMESPACES)
         if tax_total:
-            tax_subtotal = tax_total.find('.//cac:TaxSubtotal', self.NAMESPaces)
+            tax_subtotal = tax_total.find('.//cac:TaxSubtotal', self.NAMESPACES)
             if tax_subtotal:
                 line_data['linea_igv'] = self.safe_find_text(tax_subtotal, './/cbc:TaxAmount', self.NAMESPACES)
                 line_data['linea_igv_porcentaje'] = self.safe_find_text(tax_subtotal, './/cac:TaxCategory/cbc:Percent', self.NAMESPACES)
