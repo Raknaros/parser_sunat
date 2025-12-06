@@ -24,11 +24,12 @@ class FacturaProcessor(BaseDocumentProcessor):
                 'columns': {
                     'CUI': 'cui', 'numero': 'numero_documento', 'fecha_emision': 'fecha_emision',
                     'tipo_documento': 'tipo_documento_id', 'moneda': 'moneda_id', 'ruc_emisor': 'ruc_emisor',
-                    'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'nombre_receptor': 'nombre_receptor',
-                    'importe_total': 'importe_total', 'total_descuentos': 'total_descuentos',
+                    'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'documento_receptor':'documento_receptor',
+                    'nombre_receptor': 'nombre_receptor', 'importe_total': 'importe_total', 'total_descuentos': 'total_descuentos',
                     'total_otros_cargos': 'total_otros_cargos', 'total_anticipos': 'total_anticipos',
                     'total_igv': 'total_igv', 'total_isc': 'total_isc', 'total_otros_tributos': 'total_otros_tributos',
-                    'total_exonerado': 'total_exonerado', 'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito'
+                    'total_exonerado': 'total_exonerado', 'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
+                    'tipo_operacion': 'tipo_operacion'
                 }
             },
             'lines': {
@@ -43,7 +44,7 @@ class FacturaProcessor(BaseDocumentProcessor):
             'payment_terms': {
                 'table': 'pagos', 'schema': 'public',
                 'columns': {
-                    'CUI': 'cui_relacionado', 'forma_pago_id': 'forma_pago_id', 'monto_pago': 'monto',
+                    'CUI': 'cui_relacionado', 'forma_pago': 'forma_pago', 'monto_pago': 'monto',
                     'moneda_pago': 'moneda_id', 'fecha_vencimiento': 'fecha_vencimiento',
                 }
             },
@@ -81,7 +82,9 @@ class FacturaProcessor(BaseDocumentProcessor):
             invoice_data['fecha_emision'] = self.safe_find_text(root, './/cbc:IssueDate', self.NAMESPACES)
             invoice_data['tipo_documento'] = self.safe_find_text(root, './/cbc:InvoiceTypeCode', self.NAMESPACES)
             invoice_data['moneda'] = self.safe_find_attr(root, './/cbc:DocumentCurrencyCode', 'currencyID', self.NAMESPACES) or self.safe_find_text(root, './/cbc:DocumentCurrencyCode', self.NAMESPACES)
-            
+
+            invoice_data['tipo_operacion'] = self.safe_find_attr(root, './/cbc:InvoiceTypeCode', 'listID', self.NAMESPACES)
+
             supplier = root.find('.//cac:AccountingSupplierParty', self.NAMESPACES)
             if supplier:
                 invoice_data['ruc_emisor'] = self.safe_find_text(supplier, './/cbc:ID', self.NAMESPACES)
@@ -90,6 +93,7 @@ class FacturaProcessor(BaseDocumentProcessor):
             customer = root.find('.//cac:AccountingCustomerParty', self.NAMESPACES)
             if customer:
                 invoice_data['ruc_receptor'] = self.safe_find_text(customer, './/cbc:ID', self.NAMESPACES)
+                invoice_data['documento_receptor'] = self.safe_find_attr(customer, './/cbc:ID', 'schemeID',self.NAMESPACES)
                 invoice_data['nombre_receptor'] = self.safe_find_text(customer, './/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName', self.NAMESPACES)
 
             legal_monetary = root.find('.//cac:LegalMonetaryTotal', self.NAMESPACES)
@@ -184,7 +188,7 @@ class FacturaProcessor(BaseDocumentProcessor):
 
     def _process_payment_term(self, pt_node, cui):
         pt_data = {'CUI': cui}
-        pt_data['forma_pago_id'] = self.safe_find_text(pt_node, './cbc:ID', self.NAMESPACES)
+        pt_data['forma_pago'] = self.safe_find_text(pt_node, './cbc:PaymentMeansID', self.NAMESPACES)
         pt_data['monto_pago'] = self.safe_find_text(pt_node, './cbc:Amount', self.NAMESPACES)
         pt_data['moneda_pago'] = self.safe_find_attr(pt_node, './cbc:Amount', 'currencyID', self.NAMESPACES)
         pt_data['fecha_vencimiento'] = self.safe_find_text(pt_node, './cbc:PaymentDueDate', self.NAMESPACES)

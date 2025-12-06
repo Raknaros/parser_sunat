@@ -53,7 +53,7 @@ class SireVentasProcessor(BaseDocumentProcessor):
             'DAM / CP': 'dam',
             'CLU': 'clu'
         }
-        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui', 'destino', 'valor', 'igv', 'otros_cargos', 'tipo_operacion']
+        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui']
 
     def get_db_mapping(self) -> Dict[str, Dict]:
         final_mapping = {col: col for col in self.FINAL_COLUMNS}
