@@ -25,7 +25,7 @@ class FacturaProcessor(BaseDocumentProcessor):
                     'CUI': 'cui', 'numero': 'numero_documento', 'fecha_emision': 'fecha_emision',
                     'tipo_documento': 'tipo_documento_id', 'moneda': 'moneda_id', 'ruc_emisor': 'ruc_emisor',
                     'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'documento_receptor':'documento_receptor',
-                    'nombre_receptor': 'nombre_receptor', 'importe_total': 'importe_total', 'total_descuentos': 'total_descuentos',
+                    'nombre_receptor': 'nombre_receptor', 'importe_total': 'importe_total', 'total_valor_venta':'total_valor_venta','total_descuentos': 'total_descuentos',
                     'total_otros_cargos': 'total_otros_cargos', 'total_anticipos': 'total_anticipos',
                     'total_igv': 'total_igv', 'total_isc': 'total_isc', 'total_otros_tributos': 'total_otros_tributos',
                     'total_exonerado': 'total_exonerado', 'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
@@ -119,7 +119,7 @@ class FacturaProcessor(BaseDocumentProcessor):
                         tax_amount = self.safe_find_text(tax_subtotal, './/cbc:TaxAmount', self.NAMESPACES)
                         taxable_amount = self.safe_find_text(tax_subtotal, './/cbc:TaxableAmount', self.NAMESPACES)
 
-                        if tax_code == '1000': invoice_data['total_igv'] = tax_amount
+                        if tax_code == '1000': invoice_data['total_igv'] = tax_amount; invoice_data['total_valor_venta'] = taxable_amount
                         elif tax_code == '2000': invoice_data['total_isc'] = tax_amount
                         elif tax_code == '9999': invoice_data['total_otros_tributos'] = tax_amount
                         elif tax_code == '9997': invoice_data['total_exonerado'] = taxable_amount

@@ -44,7 +44,7 @@ class SireVentasProcessor(BaseDocumentProcessor):
             'Tipo CP Modificado': 'tipo_comprobante_modificado',
             'Serie CP Modificado': 'numero_serie_modificado',
             'Nro CP Modificado': 'numero_correlativo_modificado',
-            'ID Proyecto Operadores Atribución': 'proyecto_operadores',
+            'ID Proyecto Operadores Atribución': 'proyeco_operadores',
             'Tipo de Nota': 'tipo_nota',
             'Est. Comp': 'estado_comprobante',
             'Valor FOB Embarcado': 'fob_embarcado',

@@ -31,7 +31,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
             'BI Gravado DGNG': 'bi_gravado_dgng',
             'IGV / IPM DGNG': 'igv_gravado_dgng',
             'BI Gravado DNG': 'bi_gravado_dng',
-            'IGV / IPM DNG': 'igv_dng',
+            'IGV / IPM DNG': 'igv_gravado_dng',
             'Valor Adq. NG': 'valor_adq_ng',
             'ISC': 'isc',
             'ICBPER': 'icbp',
@@ -54,7 +54,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
             'Est. Comp.': 'estado_comprobante',
             'Incal': 'incal'
         }
-        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui', 'destino', 'valor', 'igv', 'tipo_operacion']
+        self.FINAL_COLUMNS = list(self.RENAME_MAP.values()) + ['cui']
 
 
     def get_db_mapping(self) -> Dict[str, Dict]:
