@@ -40,7 +40,7 @@ class FacturaProcessor(BaseDocumentProcessor):
                 'columns': {
                     'CUI': 'cui', 'linea_id': 'linea_id', 'cantidad': 'cantidad',
                     'unidad': 'unidad', 'descripcion': 'descripcion', 'codigo_producto': 'codigo_producto',
-                    'precio_unitario': 'precio_unitario', 'subtotal': 'subtotal', 'linea_igv': 'igv',
+                    'precio_unitario': 'precio_unitario', 'subtotal': 'subtotal', 'linea_igv': 'linea_igv',
                     'linea_igv_porcentaje': 'linea_igv_porcentaje'
                 }
             },
@@ -56,7 +56,7 @@ class FacturaProcessor(BaseDocumentProcessor):
                 'table': 'stg_xml_references',
                 'schema': 'meta',
                 'columns': {
-                    'CUI': 'cui', 'guia_numero': 'serie_numero  ', 'guia_tipo_documento': 'tipo_comprobante'
+                    'CUI': 'cui', 'guia_numero': 'serie_numero', 'guia_tipo_documento': 'tipo_comprobante'
                 }
             }
         }
