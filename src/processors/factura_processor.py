@@ -19,39 +19,44 @@ class FacturaProcessor(BaseDocumentProcessor):
     def get_db_mapping(self) -> Dict[str, Dict]:
         return {
             'header': {
-                'table': 'cabeceras',
-                'schema': 'public',
+                'table': 'stg_xml_headers',
+                'schema': 'meta',
                 'columns': {
-                    'CUI': 'cui', 'numero': 'numero_documento', 'fecha_emision': 'fecha_emision',
-                    'tipo_documento': 'tipo_documento_id', 'moneda': 'moneda_id', 'ruc_emisor': 'ruc_emisor',
-                    'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor', 'documento_receptor':'documento_receptor',
-                    'nombre_receptor': 'nombre_receptor', 'importe_total': 'importe_total', 'total_valor_venta':'total_valor_venta','total_descuentos': 'total_descuentos',
-                    'total_otros_cargos': 'total_otros_cargos', 'total_anticipos': 'total_anticipos',
-                    'total_igv': 'total_igv', 'total_isc': 'total_isc', 'total_otros_tributos': 'total_otros_tributos',
-                    'total_exonerado': 'total_exonerado', 'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
+                    'CUI': 'cui', 'numero': 'serie_numero', 'fecha_emision': 'fecha_emision',
+                    'tipo_documento': 'tipo_documento', 'moneda': 'moneda', 'ruc_emisor': 'ruc_emisor',
+                    'nombre_emisor': 'nombre_emisor', 'ruc_receptor': 'ruc_receptor',
+                    'documento_receptor':'documento_receptor', 'nombre_receptor': 'nombre_receptor',
+                    'importe_total': 'importe_total', 'total_valor_venta':'total_valor_venta',
+                    'total_descuentos': 'total_descuentos', 'total_otros_cargos': 'total_otros_cargos',
+                    'total_anticipos': 'total_anticipos', 'total_igv': 'total_igv', 'total_isc': 'total_isc',
+                    'total_otros_tributos': 'total_otros_tributos', 'total_exonerado': 'total_exonerado',
+                    'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
                     'tipo_operacion': 'tipo_operacion'
                 }
             },
             'lines': {
-                'table': 'lineas', 'schema': 'public',
+                'table': 'stg_xml_items',
+                'schema': 'meta',
                 'columns': {
-                    'CUI': 'cui_relacionado', 'linea_id': 'linea_id', 'cantidad': 'cantidad',
-                    'unidad': 'unidad_medida', 'descripcion': 'descripcion', 'codigo_producto': 'codigo_producto',
+                    'CUI': 'cui', 'linea_id': 'linea_id', 'cantidad': 'cantidad',
+                    'unidad': 'unidad', 'descripcion': 'descripcion', 'codigo_producto': 'codigo_producto',
                     'precio_unitario': 'precio_unitario', 'subtotal': 'subtotal', 'linea_igv': 'igv',
-                    'linea_igv_porcentaje': 'igv_porcentaje'
+                    'linea_igv_porcentaje': 'linea_igv_porcentaje'
                 }
             },
             'payment_terms': {
-                'table': 'pagos', 'schema': 'public',
+                'table': 'stg_xml_pagos',
+                'schema': 'meta',
                 'columns': {
-                    'CUI': 'cui_relacionado', 'forma_pago': 'forma_pago', 'monto_pago': 'monto',
-                    'moneda_pago': 'moneda_id', 'fecha_vencimiento': 'fecha_vencimiento',
+                    'CUI': 'cui', 'forma_pago': 'forma_pago', 'monto_pago': 'monto_pago',
+                    'moneda_pago': 'moneda_pago', 'fecha_vencimiento': 'fecha_vencimiento',
                 }
             },
             'despatch_references': {
-                'table': 'guias_referencia', 'schema': 'public',
+                'table': 'stg_xml_references',
+                'schema': 'meta',
                 'columns': {
-                    'CUI': 'cui_relacionado', 'guia_numero': 'guia_numero', 'guia_tipo_documento': 'guia_tipo_documento'
+                    'CUI': 'cui', 'guia_numero': 'serie_numero  ', 'guia_tipo_documento': 'tipo_comprobante'
                 }
             }
         }
