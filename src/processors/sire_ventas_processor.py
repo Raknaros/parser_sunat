@@ -13,7 +13,7 @@ class SireVentasProcessor(BaseDocumentProcessor):
         super().__init__(logger)
         self.RENAME_MAP = {
             'Ruc': 'ruc',
-            'Razon Social': 'nombre_emisor',
+            'Razon Social': 'razon_emisor',
             'Periodo': 'periodo_tributario',
             'CAR SUNAT': 'observaciones',
             'Fecha de emisión': 'fecha_emision',
@@ -57,7 +57,7 @@ class SireVentasProcessor(BaseDocumentProcessor):
 
     def get_db_mapping(self) -> Dict[str, Dict]:
         final_mapping = {col: col for col in self.FINAL_COLUMNS}
-        return {'sire_ventas': {'table': '_5', 'schema': 'acc', 'columns': final_mapping}}
+        return {'sire_ventas': {'table': 'stg_sire_ventas', 'schema': 'meta', 'columns': final_mapping}}
 
     def process_file(self, file_path: str) -> Optional[Dict[str, pd.DataFrame]]:
         file_name = os.path.basename(file_path)

@@ -13,7 +13,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
         super().__init__(logger)
         self.RENAME_MAP = {
             'RUC': 'ruc',
-            'Apellidos y Nombres o Razón social': 'nombre_receptor',
+            'Apellidos y Nombres o Razón social': 'razon_receptor',
             'Periodo': 'periodo_tributario',
             'CAR SUNAT': 'observaciones',
             'Fecha de emisión': 'fecha_emision',
