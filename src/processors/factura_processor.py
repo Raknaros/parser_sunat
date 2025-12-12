@@ -33,8 +33,8 @@ class FacturaProcessor(BaseDocumentProcessor):
                     'total_otros_tributos': 'total_otros_tributos', 'total_exonerado': 'total_exonerado',
                     'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
                     'tipo_operacion': 'tipo_operacion',
-                    'indicador_retencion': 'indicador_retencion',
-                    'indicador_detraccion': 'indicador_detraccion'
+                    'indicador_retencion': 'retencion',
+                    'indicador_detraccion': 'detraccion'
                 }
             },
             'lines': {
