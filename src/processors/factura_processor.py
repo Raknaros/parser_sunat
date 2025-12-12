@@ -241,15 +241,15 @@ class FacturaProcessor(BaseDocumentProcessor):
         pt_data['fecha_vencimiento'] = self.safe_find_text(pt_node, './cbc:PaymentDueDate', self.NAMESPACES)
         return pt_data
 
-    def _extract_retencion_indicator(self, root) -> bool:
+    def _extract_retencion_indicator(self, root) -> Optional[int]:
         """Busca el indicador de retención del 3%."""
         allowance_charges = root.findall('.//cac:AllowanceCharge', self.NAMESPACES)
         for charge in allowance_charges:
             indicator = self.safe_find_text(charge, './cbc:ChargeIndicator', self.NAMESPACES)
             factor = self.safe_find_text(charge, './cbc:MultiplierFactorNumeric', self.NAMESPACES)
             if indicator == 'false' and factor == '0.03':
-                return True
-        return False
+                return 1
+        return None
 
     def _extract_detraccion_indicator(self, root) -> Optional[str]:
         """Busca el código de detracción si existe."""
