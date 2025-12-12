@@ -17,8 +17,8 @@ class PlanillaProcessor(BaseDocumentProcessor):
         # Mapeos de columnas para cada tipo de reporte
         self.DB_MAPPINGS = {
             "TRA": {
-                "table": "tra",
-                "schema": "payroll",
+                "table": "stg_tra",
+                "schema": "meta",
                 "columns": {
                     "Tipo Doc": "tipo_documento_id", "Nro Doc": "numero_documento",
                     "ApePat": "apellido_paterno", "ApeMat": "apellido_materno",

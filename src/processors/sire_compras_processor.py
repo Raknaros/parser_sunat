@@ -59,7 +59,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
 
     def get_db_mapping(self) -> Dict[str, Dict]:
         final_mapping = {col: col for col in self.FINAL_COLUMNS}
-        return {'sire_compras': {'table': '_8', 'schema': 'acc', 'columns': final_mapping}}
+        return {'sire_compras': {'table': 'stg_sire_compras', 'schema': 'meta', 'columns': final_mapping}}
 
     def process_file(self, file_path: str) -> Optional[Dict[str, pd.DataFrame]]:
         file_name = os.path.basename(file_path)
