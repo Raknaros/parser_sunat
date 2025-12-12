@@ -5,6 +5,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
 import logging
+import zipfile
 
 class FacturaProcessor(BaseDocumentProcessor):
     def __init__(self, logger):
@@ -31,7 +32,9 @@ class FacturaProcessor(BaseDocumentProcessor):
                     'total_anticipos': 'total_anticipos', 'total_igv': 'total_igv', 'total_isc': 'total_isc',
                     'total_otros_tributos': 'total_otros_tributos', 'total_exonerado': 'total_exonerado',
                     'total_inafecto': 'total_inafecto', 'total_gratuito': 'total_gratuito',
-                    'tipo_operacion': 'tipo_operacion'
+                    'tipo_operacion': 'tipo_operacion',
+                    'indicador_retencion': 'indicador_retencion',
+                    'indicador_detraccion': 'indicador_detraccion'
                 }
             },
             'lines': {
@@ -74,10 +77,36 @@ class FacturaProcessor(BaseDocumentProcessor):
         self.log_operation("Procesamiento", "Iniciado", f"Archivo: {file_name}")
 
         try:
-            encoding = get_xml_encoding(file_path)
-            with open(file_path, 'r', encoding=encoding) as f:
-                xml_content = f.read()
-            
+            xml_content = None
+
+            # Caso 1: Archivo ZIP
+            if file_path.lower().endswith('.zip'):
+                with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                    # Buscar el primer archivo .xml dentro del zip
+                    xml_filename = next((name for name in zip_ref.namelist() if name.lower().endswith('.xml')), None)
+
+                    if xml_filename:
+                        with zip_ref.open(xml_filename) as f:
+                            # Leer bytes y decodificar
+                            content_bytes = f.read()
+                            # Intento simple de detección de encoding o fallback a ISO-8859-1
+                            try:
+                                xml_content = content_bytes.decode('utf-8')
+                            except UnicodeDecodeError:
+                                xml_content = content_bytes.decode('ISO-8859-1')
+                    else:
+                        self.logger.warning(f"El archivo ZIP {file_name} no contiene ningún XML.")
+                        return None
+
+            # Caso 2: Archivo XML directo
+            else:
+                encoding = get_xml_encoding(file_path)
+                with open(file_path, 'r', encoding=encoding) as f:
+                    xml_content = f.read()
+
+            if xml_content is None:
+                return None
+
             root = ET.fromstring(xml_content)
             
             result = {'header': pd.DataFrame(), 'lines': pd.DataFrame(), 'payment_terms': pd.DataFrame(), 'despatch_references': pd.DataFrame()}
@@ -131,6 +160,9 @@ class FacturaProcessor(BaseDocumentProcessor):
                         elif tax_code == '9998': invoice_data['total_inafecto'] = taxable_amount
                         elif tax_code == '9996': invoice_data['total_gratuito'] = taxable_amount
             
+            invoice_data['indicador_retencion'] = self._extract_retencion_indicator(root)
+            invoice_data['indicador_detraccion'] = self._extract_detraccion_indicator(root)
+
             cui = self._generate_cui(invoice_data)
             invoice_data['CUI'] = cui
             
@@ -141,10 +173,20 @@ class FacturaProcessor(BaseDocumentProcessor):
                 lines_list = [self._process_line(line, cui) for line in lines]
                 result['lines'] = pd.DataFrame(lines_list)
 
-            payment_terms = root.findall('.//cac:PaymentTerms', self.NAMESPACES)
-            if payment_terms:
-                pt_list = [self._process_payment_term(pt, cui) for pt in payment_terms]
-                result['payment_terms'] = pd.DataFrame(pt_list)
+            payment_terms_nodes = root.findall('.//cac:PaymentTerms', self.NAMESPACES)
+            cuotas_de_pago = []
+
+            if payment_terms_nodes:
+                for pt_node in payment_terms_nodes:
+                    # AÑADIR ESTE FILTRO:
+                    # Si el ID del nodo NO es 'Detraccion', entonces es una cuota de pago real.
+                    id_del_nodo = self.safe_find_text(pt_node, './cbc:ID', self.NAMESPACES)
+                    if id_del_nodo != 'Detraccion':
+                        # Solo si no es una detracción, lo procesamos como una cuota.
+                        cuotas_de_pago.append(self._process_payment_term(pt_node, cui))
+
+                if cuotas_de_pago:
+                    result['payment_terms'] = pd.DataFrame(cuotas_de_pago)
             
             despatch_references = root.findall('.//cac:DespatchDocumentReference', self.NAMESPACES)
             if despatch_references:
@@ -198,3 +240,27 @@ class FacturaProcessor(BaseDocumentProcessor):
         pt_data['moneda_pago'] = self.safe_find_attr(pt_node, './cbc:Amount', 'currencyID', self.NAMESPACES)
         pt_data['fecha_vencimiento'] = self.safe_find_text(pt_node, './cbc:PaymentDueDate', self.NAMESPACES)
         return pt_data
+
+    def _extract_retencion_indicator(self, root) -> bool:
+        """Busca el indicador de retención del 3%."""
+        allowance_charges = root.findall('.//cac:AllowanceCharge', self.NAMESPACES)
+        for charge in allowance_charges:
+            indicator = self.safe_find_text(charge, './cbc:ChargeIndicator', self.NAMESPACES)
+            factor = self.safe_find_text(charge, './cbc:MultiplierFactorNumeric', self.NAMESPACES)
+            if indicator == 'false' and factor == '0.03':
+                return True
+        return False
+
+    def _extract_detraccion_indicator(self, root) -> Optional[str]:
+        """Busca el código de detracción si existe."""
+        payment_means = root.findall('.//cac:PaymentMeans', self.NAMESPACES)
+        for pm in payment_means:
+            pm_id = self.safe_find_text(pm, './cbc:ID', self.NAMESPACES)
+            if pm_id == 'Detraccion':
+                # Si encontramos el PaymentMeans de Detraccion, buscamos el PaymentTerms correspondiente
+                payment_terms = root.findall('.//cac:PaymentTerms', self.NAMESPACES)
+                for pt in payment_terms:
+                    pt_id = self.safe_find_text(pt, './cbc:ID', self.NAMESPACES)
+                    if pt_id == 'Detraccion':
+                        return self.safe_find_text(pt, './cbc:PaymentMeansID', self.NAMESPACES)
+        return None
