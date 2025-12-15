@@ -40,10 +40,10 @@ def identify_document_type(file_path: Path) -> Optional[str]:
 def process_directory(input_path: Path, output_path: Path, logger, output_format: str, db_manager: Optional[DatabaseManager] = None):
     processors: Dict[str, BaseDocumentProcessor] = {
         'factura_xml': FacturaProcessor(logger),
-        'credito_xml': NotaCreditoProcessor(logger),
-        'debito_xml': NotaDebitoProcessor(logger),
-        'guia_remision_xml': GuiaRemisionProcessor(logger),
-        'boleta_xml': BoletaVentaProcessor(logger),
+        #'credito_xml': NotaCreditoProcessor(logger),
+        #'debito_xml': NotaDebitoProcessor(logger),
+        #'guia_remision_xml': GuiaRemisionProcessor(logger),
+        #'boleta_xml': BoletaVentaProcessor(logger),
         'sire_compras': SireComprasProcessor(logger),
         'sire_ventas': SireVentasProcessor(logger),
         'reporte_planilla_zip': PlanillaProcessor(logger), # <-- Registrado
@@ -51,6 +51,7 @@ def process_directory(input_path: Path, output_path: Path, logger, output_format
 
     all_results = []  # <-- CAMBIO: Usamos una lista para mantener el contexto
     stats = {'total_files': 0, 'processed_files': 0, 'errors': 0, 'unknown_files': 0, 'by_type': {}}
+    error_details = []  # <-- AÑADIR ESTA LÍNEA
 
     all_files = [p for p in input_path.glob('**/*') if p.is_file()]
     stats['total_files'] = len(all_files)
@@ -69,9 +70,19 @@ def process_directory(input_path: Path, output_path: Path, logger, output_format
                     stats['processed_files'] += 1
                 else:
                     stats['errors'] += 1
+                    error_details.append({
+                        'archivo': file_path.name,
+                        'tipo_documento': doc_type,
+                        'error': 'Fallo en procesador (Ver log para detalle exacto)'
+                    })
             except Exception as e:
                 logger.error(f"Error crítico procesando {file_path.name}: {str(e)}", exc_info=True)
                 stats['errors'] += 1
+                error_details.append({
+                    'archivo': file_path.name,
+                    'tipo_documento': doc_type,
+                    'error': str(e)
+                })
         else:
             logger.warning(f"No hay procesador para '{doc_type}': {file_path.name}")
             stats['unknown_files'] += 1
@@ -89,6 +100,13 @@ def process_directory(input_path: Path, output_path: Path, logger, output_format
     elif output_format == 'database' and db_manager:
         # CAMBIO: Pasamos la nueva estructura a la función de guardado
         save_results_to_db(all_results, db_manager, logger)
+
+    # Generar reporte de errores si hubo alguno
+    if error_details:
+        errors_df = pd.DataFrame(error_details)
+        errors_file = output_path / f'errores_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        errors_df.to_csv(errors_file, index=False, encoding='utf-8')
+        logger.info(f"Reporte de errores generado: {errors_file}")
 
     stats_df = pd.DataFrame([{'Total_Archivos': stats['total_files'], 'Archivos_Procesados': stats['processed_files'],
                               'Errores': stats['errors'], 'Desconocidos': stats['unknown_files'],
