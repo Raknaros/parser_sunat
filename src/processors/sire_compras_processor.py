@@ -157,7 +157,7 @@ class SireComprasProcessor(BaseDocumentProcessor):
         df['destino'] = np.select(condiciones, resultados_destino, default=0)
         df['valor'] = np.select(condiciones, resultados_valor, default=0)
         df['igv'] = np.select(condiciones, resultados_igv, default=0)
-        df['otros_cargos'] = np.select(condiciones, resultados_otros, default=0)
+        #df['otros_cargos'] = np.select(condiciones, resultados_otros, default=0)
         df['tipo_operacion'] = 2
 
     def _convert_data_types(self, df: pd.DataFrame) -> None:
