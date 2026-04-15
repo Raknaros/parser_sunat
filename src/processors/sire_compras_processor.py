@@ -117,9 +117,34 @@ class SireComprasProcessor(BaseDocumentProcessor):
             self.logger.error(f"Error leyendo contenido de archivo TXT: {e}")
             return None
 
+    def _revertir_conversion_sire(self, df: pd.DataFrame, columnas_monetarias: list) -> None:
+        if 'tipo_moneda' not in df.columns or 'tipo_cambio' not in df.columns:
+            self.logger.warning("No se encontraron las columnas 'tipo_moneda' o 'tipo_cambio'. Se omite la reversión de conversión.")
+            return
+
+        df['tipo_cambio'] = pd.to_numeric(df['tipo_cambio'], errors='coerce')
+        mascara_usd = (df['tipo_moneda'] == 'USD') & (df['tipo_cambio'].notna()) & (df['tipo_cambio'] > 0)
+
+        if not mascara_usd.any():
+            return
+
+        self.logger.info(f"Se encontraron {mascara_usd.sum()} filas en USD para revertir la conversión del SIRE.")
+
+        for col in columnas_monetarias:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                df.loc[mascara_usd, col] = df.loc[mascara_usd, col] / df.loc[mascara_usd, 'tipo_cambio']
+
     def _transform_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.rename(columns=self.RENAME_MAP, inplace=True)
         
+        columnas_a_revertir = [
+            'bi_gravado_dg', 'igv_gravado_dg', 'bi_gravado_dgng', 'igv_gravado_dgng',
+            'bi_gravado_dng', 'igv_gravado_dng', 'valor_adq_ng', 'isc', 'icbp',
+            'otros_cargos', 'importe_total'
+        ]
+        self._revertir_conversion_sire(df, columnas_a_revertir)
+
         self._aplicar_filtro_complejo(df)
         self._convert_data_types(df)
         
