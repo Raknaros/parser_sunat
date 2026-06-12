@@ -1,229 +1,74 @@
-import argparse
-import re
-from pathlib import Path
-import pandas as pd
-from utils.logger import setup_logger
-from utils.db_manager import DatabaseManager
-from processors.factura_processor import FacturaProcessor
-from processors.nota_credito_processor import NotaCreditoProcessor
-from processors.nota_debito_processor import NotaDebitoProcessor
-from processors.guia_remision_processor import GuiaRemisionProcessor
-from processors.boleta_venta_processor import BoletaVentaProcessor
-from processors.sire_compras_processor import SireComprasProcessor
-from processors.sire_ventas_processor import SireVentasProcessor
-from processors.planilla_processor import PlanillaProcessor # <-- Importado
-from processors.base_processor import BaseDocumentProcessor
-import sys
-from datetime import datetime
-from typing import Dict, Tuple, Optional, Pattern, List
+"""
+FastAPI ASGI entry point for the SUNAT Parser API.
 
-DOCUMENT_RULES: Dict[str, Tuple[Pattern, list]] = {
-    "declaraciones_pagos": (re.compile(r"^DetalleDeclaraciones_(\d{11})_(\d{14})\.(xlsx)$", re.IGNORECASE), ["ruc", "timestamp", "ext"]),
-    "guia_remision_xml": (re.compile(r"^(\d{11})-09-([A-Z0-9]{4})-(\d{1,8})\.(xml)$", re.IGNORECASE), ["ruc", "serie", "correlativo", "ext"]),
-    "sire_compras": (re.compile(r"^(\d{11})-\d{8}-\d{4,6}-propuesta(?:.{0,20})\.(zip|txt)$", re.IGNORECASE), ["ruc"]),
-    "sire_ventas": (re.compile(r"^LE(\d{11})\d{6}1?\d+EXP2(?:.{0,20})\.(zip|txt)$", re.IGNORECASE), ["ruc"]),
-    "factura_xml": (re.compile(r"^FACTURA([A-Z0-9]{4})-?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
-    "boleta_xml": (re.compile(r"^BOLETA([A-Z0-9]{4})-(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
-    "credito_xml": (re.compile(r"^NOTA_CREDITO([A-Z0-9]{4})_?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
-    "debito_xml": (re.compile(r"^NOTA_DEBITO([A-Z0-9]{4})_?(\d{1,8})(\d{11})\.(zip|xml)$", re.IGNORECASE), ["serie", "correlativo", "ruc", "ext"]),
-    "recibo_xml": (re.compile(r"^RHE(\d{11})(\d{1,8})\.(xml)$", re.IGNORECASE), ["ruc", "correlativo", "ext"]),
-    "reporte_planilla_zip": (re.compile(r"^(\d{11})_([A-Z]{3})_(\d{8})\.(zip)$", re.IGNORECASE), ["ruc", "codigo", "fecha", "ext"]), # <-- Regla para Planilla
-}
+This is the new cloud-native API entry point (Phase 1).
+The legacy CLI has been moved to src/legacy/cli.py.
 
-def identify_document_type(file_path: Path) -> Optional[str]:
-    filename = file_path.name
-    for doc_type, (pattern, _) in DOCUMENT_RULES.items():
-        if pattern.match(filename):
-            return doc_type
-    return 'desconocido'
+Usage:
+    uvicorn src.main:app --reload
+    # or
+    python -m src.main
+"""
+import uvicorn
+from fastapi import FastAPI
 
-def process_directory(input_path: Path, output_path: Path, logger, output_format: str, db_manager: Optional[DatabaseManager] = None):
-    processors: Dict[str, BaseDocumentProcessor] = {
-        'factura_xml': FacturaProcessor(logger),
-        #'credito_xml': NotaCreditoProcessor(logger),
-        #'debito_xml': NotaDebitoProcessor(logger),
-        #'guia_remision_xml': GuiaRemisionProcessor(logger),
-        #'boleta_xml': BoletaVentaProcessor(logger),
-        'sire_compras': SireComprasProcessor(logger),
-        'sire_ventas': SireVentasProcessor(logger),
-        'reporte_planilla_zip': PlanillaProcessor(logger), # <-- Registrado
-    }
+from src.api.routers import router
+from src.config import get_settings
 
-    all_results = []  # <-- CAMBIO: Usamos una lista para mantener el contexto
-    stats = {'total_files': 0, 'processed_files': 0, 'errors': 0, 'unknown_files': 0, 'by_type': {}}
-    error_details = []  # <-- AÑADIR ESTA LÍNEA
+# ── Application Definition ─────────────────────────────────────────────────
 
-    all_files = [p for p in input_path.glob('**/*') if p.is_file()]
-    stats['total_files'] = len(all_files)
+app = FastAPI(
+    title="SUNAT Parser API",
+    description=(
+        "Cloud-native ELT pipeline for processing SUNAT electronic documents "
+        "(invoices, credit notes, SIRE books, payroll). "
+        "Accepts parsing jobs via REST API and processes them asynchronously."
+    ),
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
-    for file_path in all_files:
-        doc_type = identify_document_type(file_path)
-        stats['by_type'][doc_type] = stats['by_type'].get(doc_type, 0) + 1
 
-        processor = processors.get(doc_type)
-        if processor:
-            try:
-                result_dict = processor.process_file(str(file_path))
-                if result_dict:
-                    # CAMBIO: Guardamos el procesador junto con sus datos
-                    all_results.append({'processor': processor, 'data': result_dict})
-                    stats['processed_files'] += 1
-                else:
-                    stats['errors'] += 1
-                    error_details.append({
-                        'archivo': file_path.name,
-                        'tipo_documento': doc_type,
-                        'error': 'Fallo en procesador (Ver log para detalle exacto)'
-                    })
-            except Exception as e:
-                logger.error(f"Error crítico procesando {file_path.name}: {str(e)}", exc_info=True)
-                stats['errors'] += 1
-                error_details.append({
-                    'archivo': file_path.name,
-                    'tipo_documento': doc_type,
-                    'error': str(e)
-                })
-        else:
-            logger.warning(f"No hay procesador para '{doc_type}': {file_path.name}")
-            stats['unknown_files'] += 1
+# ── Public Endpoints (no authentication required) ──────────────────────────
 
-    if output_format == 'csv':
-        # Para CSV, necesitamos primero aplanar la estructura (si decides usarlo)
-        results_flat = {}
-        for res in all_results:
-            for key, df in res['data'].items():
-                if df is not None:
-                    if key not in results_flat: results_flat[key] = []
-                    results_flat[key].append(df)
-        save_results_to_csv(results_flat, output_path, logger)
 
-    elif output_format == 'database' and db_manager:
-        # CAMBIO: Pasamos la nueva estructura a la función de guardado
-        save_results_to_db(all_results, db_manager, logger)
+@app.get("/health", status_code=200)
+async def health_check():
+    """Simple health check endpoint (public, no API key required)."""
+    return {"status": "healthy"}
 
-    # Generar reporte de errores si hubo alguno
-    if error_details:
-        errors_df = pd.DataFrame(error_details)
-        errors_file = output_path / f'errores_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-        errors_df.to_csv(errors_file, index=False, encoding='utf-8')
-        logger.info(f"Reporte de errores generado: {errors_file}")
 
-    stats_df = pd.DataFrame([{'Total_Archivos': stats['total_files'], 'Archivos_Procesados': stats['processed_files'],
-                              'Errores': stats['errors'], 'Desconocidos': stats['unknown_files'],
-                              **{f'Total_{k}': v for k, v in stats['by_type'].items()}}])
-    stats_file = output_path / f'estadisticas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-    stats_df.to_csv(stats_file, index=False, encoding='utf-8')
-    logger.info(f"Reporte de estadísticas generado: {stats_file}")
+# ── Router Registration (authenticated endpoints) ─────────────────────────
 
-def save_results_to_csv(results: Dict[str, List[pd.DataFrame]], output_path: Path, logger):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    for key, df_list in results.items():
-        if df_list:
-            non_empty_dfs = [df for df in df_list if not df.empty]
-            if non_empty_dfs:
-                final_df = pd.concat(non_empty_dfs, ignore_index=True)
-                output_file = output_path / f'resultados_{key}_{timestamp}.csv'
-                final_df.to_csv(output_file, index=False, encoding='utf-8')
-                logger.info(f"Reporte CSV '{key}' generado con {len(final_df)} filas.")
+app.include_router(router, prefix="/api/v1")
 
-def save_results_to_db(all_results: List[Dict], db: DatabaseManager, logger):
-    logger.info("Iniciando carga de datos a la base de datos...")
 
-    # Diccionario para agrupar DataFrames por su tabla de destino final
-    # La clave será (schema, table)
-    grouped_by_table: Dict[Tuple[str, str], Dict] = {}
+# ── Startup / Shutdown Events ─────────────────────────────────────────────
 
-    # 1. Clasificar cada DataFrame según su mapeo de destino
-    for result in all_results:
-        processor = result['processor']
-        data_dict = result['data']
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup."""
+    settings = get_settings()
+    print(
+        f"[SUNAT Parser API] Starting on "
+        f"{settings.api_host}:{settings.api_port}..."
+    )
 
-        try:
-            mapping = processor.get_db_mapping()
-        except (NotImplementedError, AttributeError):
-            continue # Este procesador no tiene mapeo de BD
 
-        for key, df in data_dict.items():
-            if df is None or df.empty or key not in mapping:
-                continue
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Log application shutdown."""
+    print("[SUNAT Parser API] Shutting down...")
 
-            mapping_info = mapping[key]
-            table = mapping_info['table']
-            schema = mapping_info['schema']
-            columns = mapping_info['columns']
-            destination = (schema, table)
 
-            # Si es la primera vez que vemos esta tabla, inicializar su grupo
-            if destination not in grouped_by_table:
-                grouped_by_table[destination] = {
-                    'dfs': [],
-                    'columns': columns,
-                    'check_duplicates': (table == 'cabeceras' and 'cui' in columns.values())
-                }
+# ── Direct Execution ──────────────────────────────────────────────────────
 
-            grouped_by_table[destination]['dfs'].append(df)
-
-    # 2. Insertar los datos agrupados en la base de datos
-    for (schema, table), group in grouped_by_table.items():
-        if not group['dfs']:
-            continue
-
-        full_df = pd.concat(group['dfs'], ignore_index=True)
-        columns = group['columns']
-
-        # Lógica para evitar duplicados (movida aquí)
-        if group['check_duplicates']:
-            cui_keys = full_df['CUI'].dropna().tolist()
-            existing_cuis = db.check_records_exist(schema, table, 'cui', cui_keys)
-
-            new_records_df = full_df[~full_df['CUI'].isin(existing_cuis)]
-
-            if not new_records_df.empty:
-                logger.info(f"Tabla '{schema}.{table}': {len(existing_cuis)} registros ya existían. Insertando {len(new_records_df)} nuevos.")
-                db.insert_dataframe(new_records_df, schema, table, columns)
-            else:
-                logger.info(f"Tabla '{schema}.{table}': No hay registros nuevos que insertar.")
-        else:
-            db.insert_dataframe(full_df, schema, table, columns)
-
-def main():
-    parser = argparse.ArgumentParser(description='Procesador de documentos SUNAT en lote.')
-    parser.add_argument('input_dir', type=str, help='Directorio con los archivos a procesar.')
-    parser.add_argument('--output_dir', type=str, default='output', help='Directorio para los resultados.')
-    parser.add_argument('--output_format', type=str, choices=['csv', 'database'], default='csv', help="Formato de salida.")
-    
-    args = parser.parse_args()
-    
-    script_dir = Path(__file__).parent.parent
-    input_path = Path(args.input_dir)
-    output_path = script_dir / args.output_dir
-    log_path = script_dir / 'logs'
-    
-    if not input_path.is_dir():
-        print(f"Error: El directorio de entrada '{input_path}' no existe.", file=sys.stderr)
-        sys.exit(1)
-    
-    output_path.mkdir(parents=True, exist_ok=True)
-    log_path.mkdir(parents=True, exist_ok=True)
-    
-    logger = setup_logger(log_path)
-    logger.info(f"Iniciando procesamiento. Directorio: {input_path}, Salida: {args.output_format}")
-
-    db_manager = None
-    if args.output_format == 'database':
-        try:
-            db_manager = DatabaseManager(logger)
-            db_manager.connect()
-        except ConnectionError as e:
-            logger.error(f"No se pudo iniciar la conexión a la base de datos: {e}. Abortando.")
-            sys.exit(1)
-
-    process_directory(input_path, output_path, logger, args.output_format, db_manager)
-    
-    if db_manager:
-        db_manager.disconnect()
-        
-    logger.info("Procesamiento completado.")
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    settings = get_settings()
+    uvicorn.run(
+        "src.main:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=True,
+    )

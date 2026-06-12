@@ -1,12 +1,14 @@
 import os
+import io
 import zipfile
 import logging
 import numpy as np
 import pandas as pd
-from io import StringIO
 from typing import Optional, Dict
 
 from .base_processor import BaseDocumentProcessor
+from src.utils.cui_generator import build_cui_sire
+
 
 class SireVentasProcessor(BaseDocumentProcessor):
     def __init__(self, logger: logging.Logger):
@@ -64,7 +66,8 @@ class SireVentasProcessor(BaseDocumentProcessor):
         self.log_operation("Procesamiento SIRE Ventas", "Iniciado", f"Archivo: {file_name}")
         try:
             raw_df = self._extract_data(file_path)
-            if raw_df is None: return None
+            if raw_df is None:
+                return None
             if raw_df.empty:
                 self.logger.warning(f"El archivo SIRE '{file_name}' no contiene comprobantes. Proceso exitoso (vacío).")
                 return {'sire_ventas': pd.DataFrame()}
@@ -73,6 +76,22 @@ class SireVentasProcessor(BaseDocumentProcessor):
             return {'sire_ventas': transformed_df}
         except Exception as e:
             self.log_operation("Procesamiento SIRE Ventas", "Error", f"Error en {file_path}: {e}", level=logging.ERROR)
+            return None
+
+    def process_content(self, file_name: str, file_content: bytes) -> Optional[Dict[str, pd.DataFrame]]:
+        self.log_operation("Procesamiento SIRE Ventas", "Iniciado", f"Archivo (memoria): {file_name}")
+        try:
+            raw_df = self._extract_data_from_bytes(file_name, file_content)
+            if raw_df is None:
+                return None
+            if raw_df.empty:
+                self.logger.warning(f"El archivo SIRE '{file_name}' no contiene comprobantes. Proceso exitoso (vacío).")
+                return {'sire_ventas': pd.DataFrame()}
+            transformed_df = self._transform_data(raw_df)
+            self.log_operation("Procesamiento SIRE Ventas", "Éxito", f"Archivo: {file_name}, Filas: {len(transformed_df)}")
+            return {'sire_ventas': transformed_df}
+        except Exception as e:
+            self.log_operation("Procesamiento SIRE Ventas", "Error", f"Error en {file_name}: {e}", level=logging.ERROR)
             return None
 
     def _extract_data(self, file_path: str) -> Optional[pd.DataFrame]:
@@ -84,16 +103,44 @@ class SireVentasProcessor(BaseDocumentProcessor):
                         if name.lower().endswith('.txt'):
                             with zip_ref.open(name) as file:
                                 df = self._read_txt_content(file)
-                                if df is not None: all_dfs.append(df)
+                                if df is not None:
+                                    all_dfs.append(df)
             elif file_path.lower().endswith('.txt'):
                 with open(file_path, 'rb') as file:
                     df = self._read_txt_content(file)
-                    if df is not None: all_dfs.append(df)
-            else: return None
-            if not all_dfs: return pd.DataFrame()
+                    if df is not None:
+                        all_dfs.append(df)
+            else:
+                return None
+            if not all_dfs:
+                return pd.DataFrame()
             return pd.concat(all_dfs, ignore_index=True)
         except Exception as e:
             self.logger.error(f"Error en extracción de {file_path}: {e}", exc_info=True)
+            return None
+
+    def _extract_data_from_bytes(self, file_name: str, file_content: bytes) -> Optional[pd.DataFrame]:
+        all_dfs = []
+        try:
+            if file_name.lower().endswith('.zip'):
+                with zipfile.ZipFile(io.BytesIO(file_content), 'r') as zip_ref:
+                    for name in zip_ref.namelist():
+                        if name.lower().endswith('.txt'):
+                            with zip_ref.open(name) as file:
+                                df = self._read_txt_content(file)
+                                if df is not None:
+                                    all_dfs.append(df)
+            elif file_name.lower().endswith('.txt'):
+                df = self._read_txt_content(io.BytesIO(file_content))
+                if df is not None:
+                    all_dfs.append(df)
+            else:
+                return None
+            if not all_dfs:
+                return pd.DataFrame()
+            return pd.concat(all_dfs, ignore_index=True)
+        except Exception as e:
+            self.logger.error(f"Error en extracción de {file_name}: {e}", exc_info=True)
             return None
 
     def _read_txt_content(self, file_obj) -> Optional[pd.DataFrame]:
@@ -105,10 +152,11 @@ class SireVentasProcessor(BaseDocumentProcessor):
                 content = content_bytes.decode('latin-1', errors='replace')
             
             lines = content.splitlines()
-            if len(lines) < 2: return None
+            if len(lines) < 2:
+                return None
             
             header = [h.strip() for h in lines[0].split('|')]
-            data = StringIO('\n'.join(lines[1:]))
+            data = io.StringIO('\n'.join(lines[1:]))
             df = pd.read_csv(data, sep='|', header=None, names=header, dtype=str)
             return df
         except Exception as e:
@@ -156,23 +204,23 @@ class SireVentasProcessor(BaseDocumentProcessor):
         self._convert_data_types(df)
         
         df['cui'] = df.apply(
-            lambda row: self._generate_cui(
-                row.get('ruc'), row.get('tipo_comprobante'), row.get('numero_serie'),
-                row.get('numero_correlativo')), axis=1)
+            lambda row: build_cui_sire(
+                row.get('ruc'), row.get('tipo_comprobante'),
+                row.get('numero_serie'), row.get('numero_correlativo')
+            ), axis=1)
         
         final_df = df[[col for col in self.FINAL_COLUMNS if col in df.columns]].copy()
         return final_df
 
     def _generate_cui(self, ruc, tipo_doc, serie, numero):
-        if pd.isna(ruc) or pd.isna(tipo_doc) or pd.isna(serie) or pd.isna(numero): return None
-        try:
-            return f"{hex(ruc)[2:].lower()}{int(tipo_doc):02d}{str(serie).strip()}{str(numero).strip()}"
-        except (ValueError, TypeError): return None
+        # Legacy method kept for backward compatibility only
+        return build_cui_sire(ruc, tipo_doc, serie, numero)
 
     def _aplicar_filtro_complejo(self, df: pd.DataFrame) -> None:
         columnas_valor = ['bi_gravada', 'descuento_bi', 'base_igv', 'descuento_igv', 'exonerado', 'inafecto', 'bi_ivap', 'ivap', 'base_otros_cargos', 'exportacion', 'tipo_comprobante']
         for col in columnas_valor:
-            if col not in df.columns: df[col] = 0
+            if col not in df.columns:
+                df[col] = 0
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
         suma_exo_inaf = df['exonerado'] + df['inafecto']
@@ -195,13 +243,13 @@ class SireVentasProcessor(BaseDocumentProcessor):
         df['destino'] = np.select(condiciones, resultados_destino, default=99)
         df['valor'] = np.select(condiciones, resultados_valor, default=0)
         df['igv'] = np.select(condiciones, resultados_igv, default=0)
-        #df['otros_cargos'] = np.select(condiciones, resultados_otros, default=df['base_otros_cargos'])
         
         if 'observaciones' in df.columns:
             df.loc[df['destino'] == 99, 'observaciones'] = df['observaciones'].astype(str) + " | Revisar dinamica de destino"
 
     def _convert_data_types(self, df: pd.DataFrame) -> None:
-        if 'ruc' in df.columns: df['ruc'] = pd.to_numeric(df['ruc'], errors='coerce').astype('Int64')
+        if 'ruc' in df.columns:
+            df['ruc'] = pd.to_numeric(df['ruc'], errors='coerce').astype('Int64')
         
         int_columns = ['periodo_tributario', 'tipo_comprobante', 'destino', 'tipo_comprobante_modificado', 'numero_final']
         for col in int_columns:

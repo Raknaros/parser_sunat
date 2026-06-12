@@ -1,0 +1,1 @@
+# Legacy CLI - preserved for backward compatibility
