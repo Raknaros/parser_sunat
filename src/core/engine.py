@@ -43,6 +43,29 @@ def run_pipeline(request_data: dict) -> None:
             - job_metadata: Optional[dict]
     """
     logger = logging.getLogger(__name__)
+    try:
+        _run_pipeline_internal(request_data)
+    except Exception as e:
+        logger.error(
+            f"[{request_data.get('job_id', 'unknown')}] "
+            f"Pipeline crashed with unhandled exception: {e}",
+            exc_info=True,
+        )
+
+
+def _run_pipeline_internal(request_data: dict) -> None:
+    """
+    Internal pipeline execution (wrapped by run_pipeline for error logging).
+
+    Args:
+        request_data: Dictionary with keys:
+            - job_id: str
+            - prefix: str (S3 prefix to scan, typically "unparsing/")
+            - webhook_url: Optional[str]
+            - filters: Optional[dict] with 'ruc' and/or 'tipo_archivo'
+            - job_metadata: Optional[dict]
+    """
+    logger = logging.getLogger(__name__)
     settings = get_settings()
     start_time = time.time()
 

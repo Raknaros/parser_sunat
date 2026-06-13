@@ -9,11 +9,13 @@ Usage:
     # or
     python -m src.main
 """
+import logging
 import uvicorn
 from fastapi import FastAPI
 
 from src.api.routers import router
 from src.config import get_settings
+from src.utils.logger import configure_root_logger
 
 # ── Application Definition ─────────────────────────────────────────────────
 
@@ -48,11 +50,13 @@ app.include_router(router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():
-    """Log application startup."""
+    """Configure logging and log application startup."""
+    # Configure root logger so all logging.getLogger(__name__) calls
+    # are visible in Docker logs via stderr
+    configure_root_logger()
     settings = get_settings()
-    print(
-        f"[SUNAT Parser API] Starting on "
-        f"{settings.api_host}:{settings.api_port}..."
+    logging.getLogger(__name__).info(
+        "Starting on %s:%s...", settings.api_host, settings.api_port
     )
 
 
