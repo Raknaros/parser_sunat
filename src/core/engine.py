@@ -337,4 +337,25 @@ def _send_webhook_if_needed(
             "duration_seconds": duration,
         },
         "details": {
-            "successful_keys": [k.replace("unparsing/", f"parsed/{job_id}/", 1) for k in successful_keys],
+            "successful_keys": [
+                k.replace("unparsing/", f"parsed/{job_id}/", 1)
+                for k in successful_keys
+            ],
+            "failed_keys": [
+                k.replace("unparsing/", f"failed/{job_id}/", 1)
+                for k in failed_keys
+            ],
+        },
+    }
+
+    try:
+        # Since we're in a synchronous context (BackgroundTasks), run the
+        # async send_webhook in a new event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(send_webhook(webhook_url, payload))
+        loop.close()
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"Failed to send webhook for job '{job_id}': {e}", exc_info=True
+        )
