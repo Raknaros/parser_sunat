@@ -61,6 +61,7 @@ def run_pipeline(request_data: dict) -> None:
             access_key=settings.s3_access_key,
             secret_key=settings.s3_secret_key,
             endpoint_url=settings.s3_endpoint_url,
+            region_name=settings.s3_region,
             logger=logger,
         )
     except Exception as e:

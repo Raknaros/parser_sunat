@@ -28,6 +28,7 @@ class S3Storage:
         access_key: str,
         secret_key: str,
         endpoint_url: Optional[str] = None,
+        region_name: str = "auto",
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -35,7 +36,7 @@ class S3Storage:
 
         Supports:
         - AWS S3: leave endpoint_url as None (uses AWS default endpoint)
-        - Cloudflare R2: provide the R2 endpoint URL
+        - Cloudflare R2: provide the R2 endpoint URL and region_name="auto"
         - MinIO (on-premise): provide the MinIO endpoint URL
 
         Args:
@@ -44,6 +45,8 @@ class S3Storage:
             secret_key: S3-compatible secret access key
             endpoint_url: Optional custom endpoint (for R2/MinIO).
                           If None, uses AWS S3 default.
+            region_name: AWS region. Cloudflare R2 requires "auto".
+                         AWS S3 would use "us-east-1" or similar.
             logger: Optional logger instance
         """
         self.bucket_name = bucket_name
@@ -53,6 +56,7 @@ class S3Storage:
         client_kwargs = {
             "aws_access_key_id": access_key,
             "aws_secret_access_key": secret_key,
+            "region_name": region_name,
         }
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url

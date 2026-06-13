@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     s3_access_key: str
     s3_secret_key: str
     s3_endpoint_url: Optional[str] = None  # Optional: for R2/MinIO. Uses AWS default if None.
+    s3_region: str = "auto"  # Cloudflare R2 uses "auto". AWS would use "us-east-1"
 
     # ── API Security ──
     api_secret_key: str
