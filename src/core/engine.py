@@ -2,7 +2,7 @@
 Pipeline engine for the ELT process.
 
 Orchestrates the full pipeline:
-1. List files from S3 (prefix is always 'unparsing/')
+1. List files from S3 (prefix is always 'unparsed/')
 2. Filter by regex rules (DOCUMENT_RULES) and request filters
 3. Download and process files in parallel (ThreadPoolExecutor)
 4. Bulk insert results into PostgreSQL
@@ -37,7 +37,7 @@ def run_pipeline(request_data: dict) -> None:
     Args:
         request_data: Dictionary with keys:
             - job_id: str
-            - prefix: str (S3 prefix to scan, typically "unparsing/")
+            - prefix: str (S3 prefix to scan, typically "unparsed/")
             - webhook_url: Optional[str]
             - filters: Optional[dict] with 'ruc' and/or 'tipo_archivo'
             - job_metadata: Optional[dict]
@@ -60,7 +60,7 @@ def _run_pipeline_internal(request_data: dict) -> None:
     Args:
         request_data: Dictionary with keys:
             - job_id: str
-            - prefix: str (S3 prefix to scan, typically "unparsing/")
+            - prefix: str (S3 prefix to scan, typically "unparsed/")
             - webhook_url: Optional[str]
             - filters: Optional[dict] with 'ruc' and/or 'tipo_archivo'
             - job_metadata: Optional[dict]
@@ -70,7 +70,7 @@ def _run_pipeline_internal(request_data: dict) -> None:
     start_time = time.time()
 
     job_id = request_data.get("job_id", "unknown")
-    prefix = request_data.get("prefix", "unparsing/")
+    prefix = request_data.get("prefix", "unparsed/")
     webhook_url: Optional[str] = request_data.get("webhook_url")
     filters: Optional[dict] = request_data.get("filters")
     job_metadata: Optional[dict] = request_data.get("job_metadata")
@@ -208,11 +208,11 @@ def _run_pipeline_internal(request_data: dict) -> None:
 
     # ── 4. Move files in S3 ──────────────────────────────────────────────
     for s3_key in successful_keys:
-        dest_key = s3_key.replace("unparsing/", f"parsed/{job_id}/", 1)
+        dest_key = s3_key.replace("unparsed/", f"parsed/{job_id}/", 1)
         s3.move_object(s3_key, dest_key)
 
     for s3_key in failed_keys:
-        dest_key = s3_key.replace("unparsing/", f"failed/{job_id}/", 1)
+        dest_key = s3_key.replace("unparsed/", f"failed/{job_id}/", 1)
         s3.move_object(s3_key, dest_key)
 
     logger.info(
@@ -362,11 +362,11 @@ def _send_webhook_if_needed(
         },
         "details": {
             "successful_keys": [
-                k.replace("unparsing/", f"parsed/{job_id}/", 1)
+                k.replace("unparsed/", f"parsed/{job_id}/", 1)
                 for k in successful_keys
             ],
             "failed_keys": [
-                k.replace("unparsing/", f"failed/{job_id}/", 1)
+                k.replace("unparsed/", f"failed/{job_id}/", 1)
                 for k in failed_keys
             ],
         },

@@ -28,7 +28,7 @@ class ParseJobRequest(BaseModel):
     Request body for POST /api/v1/jobs/parse.
 
     The prefix is not configurable — all files are scanned from the
-    'unparsing/' S3 prefix (configured internally).
+    'unparsed/' S3 prefix (configured internally).
 
     Attributes:
         webhook_url: URL to POST job completion notification.
