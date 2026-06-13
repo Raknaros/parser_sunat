@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # ── Uvicorn Server ──
     api_host: str = "0.0.0.0"
-    api_port: int = 10022
+    api_port: int = 8000
 
     # ── Database (PostgreSQL) ──
     db_uri: str
