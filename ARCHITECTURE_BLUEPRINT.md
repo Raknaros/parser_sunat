@@ -159,3 +159,88 @@ Al finalizar el pipeline, armar este payload y hacer un POST a request_data["web
     "failed_keys": ["failed/corrupt.zip", "..."]
   }
 }
+
+7. Capa de Infraestructura y Despliegue (Fase 6 - Dockerización)
+
+El objetivo de esta fase es encapsular la aplicación ASGI en un contenedor inmutable, ligero y seguro, listo para ser ejecutado en entornos On-Premise (mediante Docker Compose) o Cloud (ECS/Kubernetes).
+
+### A. Archivo `.dockerignore`
+Crear un archivo `.dockerignore` en la raíz para evitar subir archivos innecesarios al contexto de construcción, reduciendo el tamaño de la imagen y protegiendo secretos:
+```text
+.git
+.env
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+audit/
+
+B. Especificación del Dockerfile
+Crear un Dockerfile en la raíz con las siguientes directrices arquitectónicas:
+
+Base Image: python:3.12-slim (o la versión exacta usada en desarrollo, siempre variante slim para reducir superficie de ataque y tamaño).
+
+Dependencias del SO: Instalar librerías críticas para compilación de psycopg2 y lxml antes de los paquetes de Python.
+
+Caché: Usar pip install --no-cache-dir para no engordar la imagen.
+
+Usuario No Privilegiado: Crear un usuario genérico (appuser) para no ejecutar el contenedor como root (Práctica de Seguridad Cloud).
+
+Entrypoint: Lanzar Uvicorn configurado para escuchar en el puerto 8000.
+
+Estructura sugerida para el Dockerfile:
+
+Dockerfile
+FROM python:3.12-slim
+
+# Evitar que Python escriba archivos .pyc y forzar logs sin buffer
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Instalar dependencias del sistema para lxml y psycopg2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar e instalar dependencias
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el código fuente
+COPY src/ /app/src/
+
+# Crear usuario sin privilegios por seguridad
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
+# Exponer el puerto de la API
+EXPOSE 8000
+
+# Comando de inicio
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+(Nota sobre workers: Se setea a 1 porque el paralelismo ya se maneja internamente con ThreadPoolExecutor en engine.py. Multiplicar workers de Uvicorn multiplicaría el ThreadPool, saturando la RAM y la Base de Datos).
+
+C. Orquestación Local (docker-compose.yml)
+Para facilitar el despliegue en el servidor Debian On-Premise, crear un docker-compose.yml en la raíz. Este leerá automáticamente las variables del archivo .env.
+
+YAML
+version: '3.8'
+
+services:
+  parser-api:
+    build: .
+    container_name: parser_sunat_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    # Opcional: Limitar memoria si los lotes son excesivamente grandes
+    deploy:
+      resources:
+        limits:
+          memory: 2G

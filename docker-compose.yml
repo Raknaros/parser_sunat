@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  parser-api:
+    build: .
+    container_name: parser_sunat_api
+    ports:
+      - "10022:10022"
+    env_file:
+      - .env
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
