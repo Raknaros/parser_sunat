@@ -30,4 +30,4 @@ EXPOSE 10022
 # Comando de inicio
 # Workers=1 porque el paralelismo ya se maneja internamente con ThreadPoolExecutor en engine.py
 # Multiplicar workers de Uvicorn multiplicaría el ThreadPool, saturando RAM y BD
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "10022", "--workers", "1"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
