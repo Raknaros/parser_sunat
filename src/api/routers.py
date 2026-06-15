@@ -80,10 +80,10 @@ async def create_parse_job(
     job_id = generate_job_id(request.filters)
 
     # Build the full request data dict for the pipeline engine
-    # The 'unparsing/' prefix is an internal constant, not user-configurable
+    # The 'unparsed/' prefix is an internal constant, not user-configurable
     request_data = {
         "job_id": job_id,
-        "prefix": "unparsing/",
+        "prefix": "unparsed/",
         "webhook_url": str(request.webhook_url) if request.webhook_url else None,
         "filters": request.filters.model_dump() if request.filters else None,
         "job_metadata": request.job_metadata,
