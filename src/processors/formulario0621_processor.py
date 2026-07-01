@@ -84,7 +84,11 @@ class Formulario0621(BaseDocumentProcessor):
                     # 1.1 Si es el archivo principal de casillas, lo extraemos completo
                     if basename.endswith('pdt621_casillas.csv'):
                         with zipf.open(filename) as csv_file:
-                            target_df = pd.read_csv(csv_file)
+                            # El CSV tiene una coma final en cada fila de datos,
+                            # lo que pandas interpreta como una columna extra.
+                            # usecols=range(8) ignora esa columna fantasma y evita
+                            # que los índices de columna se desplacen.
+                            target_df = pd.read_csv(csv_file, usecols=range(8))
 
                     # 1.2 Si es otro CSV, auditamos si tiene información
                     else:
@@ -112,14 +116,19 @@ class Formulario0621(BaseDocumentProcessor):
                 'fecha_presentacion': str(base_row.get('Fecha Presentacion', '')),
             }
 
-            # 3. Transponer casillas
+            # 3. Transponer casillas — solo filas con Nro Casilla numérico
             casillas_df = target_df[['Nro Casilla', 'Valor Casilla']].dropna(
                 subset=['Nro Casilla']
             )
-            casillas_dict = {
-                f"_{int(row['Nro Casilla'])}": row['Valor Casilla']
-                for _, row in casillas_df.iterrows()
-            }
+            casillas_dict = {}
+            for _, row in casillas_df.iterrows():
+                nro = str(row['Nro Casilla']).strip()
+                try:
+                    casilla_num = int(nro)
+                    casillas_dict[f"_{casilla_num}"] = row['Valor Casilla']
+                except (ValueError, TypeError):
+                    # No es numérico → se ignora (metadata no relevante)
+                    pass
 
             # 4. Agrupar columnas válidas y empaquetar desconocidas
             final_row = {**base_data}
