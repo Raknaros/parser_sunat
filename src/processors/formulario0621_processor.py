@@ -36,6 +36,10 @@ class Formulario0621(BaseDocumentProcessor):
     # Casillas que son REAL (decimal) en la BD — no castear a int
     REAL_CASILLAS = {'_173', '_380', '_315'}
 
+    # Casillas de metadata que ya se capturan en base_data (ruc, periodo, fecha, etc.)
+    # No deben incluirse en notas ni en EXPECTED_CASILLAS.
+    METADATA_CASILLAS = {'_2', '_7', '_13', '_46', '_56', '_58'}
+
     def __init__(self, logger: logging.Logger):
         super().__init__(logger)
 
@@ -145,8 +149,9 @@ class Formulario0621(BaseDocumentProcessor):
                             final_row[key] = int(float(value)) if pd.notna(value) else None
                     except (ValueError, TypeError):
                         final_row[key] = value
-                else:
+                elif key not in self.METADATA_CASILLAS:
                     # LÓGICA DE FILTRADO PARA NOTAS
+                    # Metadata (RUC, período, fecha, etc.) ya capturada en base_data
                     if pd.notna(value):
                         try:
                             if float(value) != 0:
