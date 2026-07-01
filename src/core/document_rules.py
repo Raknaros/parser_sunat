@@ -51,6 +51,10 @@ DOCUMENT_RULES: dict[str, Tuple[Pattern, List[str]]] = {
         re.compile(r"^(\d{11})_([A-Z]{3})_(\d{8})\.(zip)$", re.IGNORECASE),
         ["ruc", "codigo", "fecha", "ext"],
     ),
+    "formulario_0621": (
+        re.compile(r"^(\d{11})_0621_(\d{10,15})_(\d+)\.(zip)$", re.IGNORECASE),
+        ["ruc", "orden", "id", "ext"],
+    ),
 }
 
 

@@ -11,7 +11,8 @@ from pydantic import BaseModel, AnyHttpUrl
 
 TIPO_ARCHIVO_VALUES = Literal[
     "factura", "boleta", "nota_credito", "nota_debito",
-    "guia_remision", "sire_ventas", "sire_compras", "planilla"
+    "guia_remision", "sire_ventas", "sire_compras", "planilla",
+    "formulario_0621"
 ]
 
 

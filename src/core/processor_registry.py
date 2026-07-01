@@ -21,6 +21,7 @@ from src.processors.sire_ventas_processor import SireVentasProcessor
 from src.processors.planilla_processor import PlanillaProcessor
 from src.processors.recibo_processor import ReciboProcessor
 from src.processors.declaracion_pago_processor import DeclaracionPagoProcessor
+from src.processors.formulario0621_processor import Formulario0621
 
 
 # ── DOCUMENT_RULES key → Processor class ──────────────────────────────────
@@ -36,6 +37,7 @@ PROCESSOR_MAP: Dict[str, Type[BaseDocumentProcessor]] = {
     "reporte_planilla_zip": PlanillaProcessor,
     "recibo_xml": ReciboProcessor,
     "declaraciones_pagos": DeclaracionPagoProcessor,
+    "formulario_0621": Formulario0621,
 }
 
 # ── API tipo_archivo value → DOCUMENT_RULES key ───────────────────────────
@@ -49,6 +51,7 @@ TIPO_ARCHIVO_MAP: Dict[str, str] = {
     "sire_compras": "sire_compras",
     "sire_ventas": "sire_ventas",
     "planilla": "reporte_planilla_zip",
+    "formulario_0621": "formulario_0621",
 }
 
 
